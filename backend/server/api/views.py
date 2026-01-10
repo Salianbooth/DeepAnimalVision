@@ -1,93 +1,129 @@
 import os
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.core.files.base import ContentFile
-from PIL import Image
-
-from recognition.detector import detect_image
 from .models import Record, Detection
+from recognition.detector import detect_image
+from django.core.files.base import ContentFile
 
 
 @csrf_exempt
 def detect(request):
+    """
+    上传图片进行 YOLO 识别，并存储结果到数据库
+    """
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
 
-    image_file = request.FILES.get("image")
-    if not image_file:
+    image = request.FILES.get("image")
+    if not image:
         return JsonResponse({"error": "No image uploaded"}, status=400)
 
-    # =========================
-    # 1. 保存临时图片
-    # =========================
-    temp_path = "temp.jpg"
-    with open(temp_path, "wb+") as f:
-        for chunk in image_file.chunks():
+    # 临时保存图片
+    save_path = os.path.join("temp.jpg")
+    with open(save_path, "wb+") as f:
+        for chunk in image.chunks():
             f.write(chunk)
 
-    # 读取图片尺寸
-    img = Image.open(temp_path)
-    width, height = img.size
+    # 调 YOLO 识别
+    results = detect_image(save_path)
 
-    # =========================
-    # 2. 调用 YOLO 识别
-    # =========================
-    results = detect_image(temp_path)
-    """
-    results 示例：
-    [
-      {
-        "class_id": 0,
-        "label": "cat",
-        "confidence": 0.87,
-        "bbox": [x1, y1, x2, y2]
-      }
-    ]
-    """
-
-    # =========================
-    # 3. 创建 Record
-    # =========================
-    record = Record.objects.create(
-        image_width=width,
-        image_height=height
+    # 保存 Record 到数据库
+    record = Record(
+        image=ContentFile(image.read(), name=image.name),
+        image_width=image.image.width if hasattr(image, "image") else 0,
+        image_height=image.image.height if hasattr(image, "image") else 0
     )
+    record.save()
 
-    # 保存图片到 ImageField
-    record.image.save(
-        image_file.name,
-        ContentFile(image_file.read()),
-        save=True
-    )
-
-    # =========================
-    # 4. 批量创建 Detection
-    # =========================
-    detections_response = []
-
+    # 保存每个 Detection
     for det in results:
-        x1, y1, x2, y2 = det["bbox"]
-
-        detection = Detection.objects.create(
+        Detection.objects.create(
             record=record,
-            label=det.get("label", "unknown"),
-            confidence=det["confidence"],
-            x1=x1,
-            y1=y1,
-            x2=x2,
-            y2=y2
+            label=det.get("label", "未知"),
+            confidence=det.get("confidence", 0),
+            x1=det["bbox"][0],
+            y1=det["bbox"][1],
+            x2=det["bbox"][2],
+            y2=det["bbox"][3]
         )
 
-        detections_response.append({
-            "label": detection.label,
-            "confidence": detection.confidence,
-            "bbox": [x1, y1, x2, y2]
+    return JsonResponse({"detections": results, "record_id": record.id})
+
+
+def record_list(request):
+    """
+    获取历史记录列表
+    """
+    if request.method != "GET":
+        return JsonResponse({"error": "GET only"}, status=405)
+
+    records = Record.objects.order_by("-created_at")
+    data = []
+    for r in records:
+        data.append({
+            "id": r.id,
+            "image": r.image.url if r.image else "",
+            "time": r.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "count": r.detections.count()
+        })
+
+    return JsonResponse({"records": data})
+
+
+def record_detail(request, record_id):
+    """
+    获取某条记录的详细信息（包含每个检测框）
+    """
+    if request.method != "GET":
+        return JsonResponse({"error": "GET only"}, status=405)
+
+    try:
+        record = Record.objects.get(id=record_id)
+    except Record.DoesNotExist:
+        return JsonResponse({"error": "Record not found"}, status=404)
+
+    detections = []
+    for d in record.detections.all():
+        detections.append({
+            "label": d.label,
+            "confidence": d.confidence,
+            "bbox": [d.x1, d.y1, d.x2, d.y2]
         })
 
     return JsonResponse({
-        "record_id": record.id,
-        "image": record.image.url,
-        "image_width": width,
-        "image_height": height,
-        "detections": detections_response
+        "id": record.id,
+        "image": record.image.url if record.image else "",
+        "image_width": record.image_width,
+        "image_height": record.image_height,
+        "detections": detections,
+        "time": record.created_at.strftime("%Y-%m-%d %H:%M:%S")
     })
+
+
+@csrf_exempt
+def record_delete(request, record_id):
+    """
+    删除单条历史记录
+    """
+    if request.method != "DELETE":
+        return JsonResponse({"error": "DELETE only"}, status=405)
+
+    try:
+        record = Record.objects.get(id=record_id)
+    except Record.DoesNotExist:
+        return JsonResponse({"error": "Record not found"}, status=404)
+
+    record.delete()
+    return JsonResponse({"success": True})
+
+
+@csrf_exempt
+def record_clear(request):
+    """
+    删除所有历史记录
+    """
+    if request.method != "DELETE":
+        return JsonResponse({"error": "DELETE only"}, status=405)
+
+    Record.objects.all().delete()
+    return JsonResponse({"success": True})
