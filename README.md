@@ -26,7 +26,7 @@ DeepAnimalVision 是一个基于深度学习的动物图像检测与识别系统
 ```CSS
 Frontend (Vue 3 + Vite + TS)
         ↓ HTTP / Axios
-Backend (FastAPI)
+Backend (Django)
         ↓
 YOLO 模型推理
         ↓
@@ -45,7 +45,7 @@ Canvas 可视化 + 交互列表
 - Pinia（状态管理）
 
 ### 后端（Backend）
-- FastAPI
+- Django 
 - PyTorch
 - YOLO 系列目标检测模型
 - OpenCV（图像处理）
