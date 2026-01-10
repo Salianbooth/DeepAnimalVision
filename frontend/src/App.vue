@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, reactive } from 'vue'
 import axios from 'axios'
 
 /* ===== 核心状态 ===== */
@@ -8,6 +8,17 @@ const detections = ref<any[]>([])
 const loading = ref(false)
 const imageUrl = ref<string | null>(null)
 const activeIndex = ref<number | null>(null)
+const imageObj = ref<HTMLImageElement | null>(null)
+
+// 变换状态：缩放和平移
+const transform = reactive({
+  scale: 1,
+  offsetX: 0,
+  offsetY: 0,
+  isDragging: false,
+  startX: 0,
+  startY: 0
+})
 
 type HistoryItem = {
   imageUrl: string
@@ -20,146 +31,162 @@ const historyList = ref<HistoryItem[]>([])
 const classMap: Record<number, string> = { 0: '人', 5: '公交车', 11: '停车标志' }
 const colorMap: Record<number, string> = { 0: '#F43F5E', 5: '#3B82F6', 11: '#10B981' }
 
-/* ===== 分类统计计算 ===== */
+/* ===== 分类统计 ===== */
 const stats = computed(() => {
   const map: Record<number, number> = {}
   detections.value.forEach(det => {
     map[det.class_id] = (map[det.class_id] || 0) + 1
   })
-  return Object.keys(map).map(id => {
-    const classId = Number(id)
-    return {
-      label: classMap[classId] || `类别 ${classId}`,
-      count: map[classId],
-      color: colorMap[classId] || '#8B5CF6'
-    }
-  })
+  return Object.keys(map).map(id => ({
+    label: classMap[Number(id)] || `类别 ${id}`,
+    count: map[Number(id)],
+    color: colorMap[Number(id)] || '#8B5CF6'
+  }))
 })
 
+/* ===== 缩放与平移逻辑 ===== */
+const handleZoom = (delta: number) => {
+  const newScale = transform.scale + delta
+  if (newScale >= 0.2 && newScale <= 10) {
+    transform.scale = newScale
+    drawCanvas()
+  }
+}
+
+const resetTransform = () => {
+  transform.scale = 1
+  transform.offsetX = 0
+  transform.offsetY = 0
+  drawCanvas()
+}
+
+const startDrag = (e: MouseEvent) => {
+  if (!imageUrl.value) return
+  transform.isDragging = true
+  transform.startX = e.clientX - transform.offsetX
+  transform.startY = e.clientY - transform.offsetY
+}
+
+const onDrag = (e: MouseEvent) => {
+  if (!transform.isDragging) return
+  transform.offsetX = e.clientX - transform.startX
+  transform.offsetY = e.clientY - transform.startY
+  drawCanvas()
+}
+
+const stopDrag = () => {
+  transform.isDragging = false
+}
+
+/* ===== 功能函数 ===== */
+const saveAsImage = () => {
+  if (!canvasRef.value) return
+  const link = document.createElement('a')
+  link.download = `Result_${Date.now()}.jpg`
+  link.href = canvasRef.value.toDataURL('image/jpeg', 0.9)
+  link.click()
+}
+
 const exportResult = () => {
-  if (!detections.value.length) return
   const data = { time: new Date().toLocaleString(), detections: detections.value }
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `detect_${Date.now()}.json`
+  a.download = `data_${Date.now()}.json`
   a.click()
-  URL.revokeObjectURL(url)
 }
 
-const deleteHistory = (index: number) => {
-  historyList.value.splice(index, 1)
-  localStorage.setItem('history', JSON.stringify(historyList.value))
-}
-
-const clearHistory = () => {
-  if (!confirm('确定要清空所有历史记录吗？')) return
-  historyList.value = []
-  localStorage.removeItem('history')
-}
-
-/* ===== 核心绘制：解决“图片过窄”问题 ===== */
+/* ===== 核心绘制逻辑 ===== */
 const drawCanvas = () => {
-  if (!canvasRef.value || !imageUrl.value) return
+  if (!canvasRef.value || !imageObj.value) return
   const canvas = canvasRef.value
   const ctx = canvas.getContext('2d')!
-  const img = new Image()
-  img.src = imageUrl.value
-  
-  img.onload = () => {
-    const wrapper = canvas.parentElement
-    if (!wrapper) return
+  const img = imageObj.value
+  const wrapper = canvas.parentElement!
+
+  canvas.width = wrapper.clientWidth
+  canvas.height = wrapper.clientHeight
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  // 计算基础缩放比例 (Contain 模式)
+  const baseScale = Math.min(canvas.width / img.width, canvas.height / img.height) * 0.9
+
+  ctx.save()
+  // 应用变换：移至中心 -> 应用平移偏移 -> 应用缩放
+  ctx.translate(canvas.width / 2 + transform.offsetX, canvas.height / 2 + transform.offsetY)
+  ctx.scale(transform.scale, transform.scale)
+
+  const drawW = img.width * baseScale
+  const drawH = img.height * baseScale
+  const x = -drawW / 2
+  const y = -drawH / 2
+
+  ctx.drawImage(img, x, y, drawW, drawH)
+
+  // 绘制识别框
+  detections.value.forEach((det, index) => {
+    const [x1, y1, x2, y2] = det.bbox.map((v: number) => v * baseScale)
+    const isActive = index === activeIndex.value
+    const color = isActive ? '#F59E0B' : (colorMap[det.class_id] || '#8B5CF6')
+
+    ctx.strokeStyle = color
+    ctx.lineWidth = (isActive ? 4 : 2) / transform.scale // 线宽不随缩放变模糊
+    ctx.strokeRect(x + x1, y + y1, x2 - x1, y2 - y1)
+
+    // 绘制标签
+    ctx.fillStyle = color
+    const label = `${classMap[det.class_id] || '物体'} ${(det.confidence * 100).toFixed(0)}%`
+    const fontSize = Math.max(10 / transform.scale, 8)
+    ctx.font = `bold ${fontSize}px sans-serif`
+    const txtWidth = ctx.measureText(label).width
     
-    // 获取容器可用空间
-    const padding = 40 // 留出一点边距
-    const maxWidth = wrapper.clientWidth - padding
-    const maxHeight = wrapper.clientHeight - padding
-
-    // 计算缩放比例 (Contain 模式)
-    const scaleW = maxWidth / img.width
-    const scaleH = maxHeight / img.height
-    const scale = Math.min(scaleW, scaleH)
-
-    // 设置 Canvas 尺寸为图片缩放后的实际大小
-    canvas.width = img.width * scale
-    canvas.height = img.height * scale
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-
-    // 绘制识别框
-    detections.value.forEach((det, index) => {
-      const [x1, y1, x2, y2] = det.bbox.map((v: number) => v * scale)
-      const isActive = index === activeIndex.value
-      const color = isActive ? '#F59E0B' : (colorMap[det.class_id] || '#8B5CF6')
-
-      ctx.save()
-      ctx.shadowBlur = 6
-      ctx.shadowColor = 'rgba(0,0,0,0.2)'
-      ctx.strokeStyle = color
-      ctx.lineWidth = isActive ? 5 : 3
-      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1)
-      
-      // 标签绘制
-      const label = `${classMap[det.class_id] || '物体'} ${(det.confidence * 100).toFixed(0)}%`
-      ctx.font = 'bold 12px sans-serif'
-      const txtWidth = ctx.measureText(label).width
-      
-      ctx.fillStyle = color
-      ctx.fillRect(x1, (y1 > 22 ? y1 - 22 : y1), txtWidth + 10, 22)
-      
-      ctx.fillStyle = '#fff'
-      ctx.shadowBlur = 0
-      ctx.fillText(label, x1 + 5, (y1 > 22 ? y1 - 7 : y1 + 15))
-      ctx.restore()
-    })
-  }
+    const tagH = 18 / transform.scale
+    ctx.fillRect(x + x1, y + y1 - tagH, txtWidth + 4 / transform.scale, tagH)
+    ctx.fillStyle = '#fff'
+    ctx.fillText(label, x + x1 + 2 / transform.scale, y + y1 - 4 / transform.scale)
+  })
+  ctx.restore()
 }
 
+/* ===== 交互处理 ===== */
 const onFileChange = async (event: Event) => {
   const input = event.target as HTMLInputElement
   if (!input.files?.[0]) return
   const file = input.files[0]
   
-  if (imageUrl.value) URL.revokeObjectURL(imageUrl.value)
   imageUrl.value = URL.createObjectURL(file)
-  
-  const formData = new FormData()
-  formData.append('image', file)
-  loading.value = true
-  detections.value = []
-
-  try {
-    const res = await axios.post('http://127.0.0.1:8000/api/detect/', formData)
-    detections.value = res.data.detections
-    activeIndex.value = null
-    drawCanvas()
+  const img = new Image()
+  img.src = imageUrl.value
+  img.onload = async () => {
+    imageObj.value = img
+    resetTransform()
     
-    const record = { 
-      imageUrl: imageUrl.value, 
-      detections: res.data.detections, 
-      time: new Date().toLocaleTimeString() 
-    }
-    historyList.value.unshift(record)
-    localStorage.setItem('history', JSON.stringify(historyList.value))
-  } catch (e) {
-    alert('识别失败，请检查后端')
-  } finally {
-    loading.value = false
+    const formData = new FormData()
+    formData.append('image', file)
+    loading.value = true
+    try {
+      const res = await axios.post('http://127.0.0.1:8000/api/detect/', formData)
+      detections.value = res.data.detections
+      drawCanvas()
+      historyList.value.unshift({ imageUrl: imageUrl.value!, detections: res.data.detections, time: new Date().toLocaleTimeString() })
+    } catch (e) { alert('后端连接失败') }
+    finally { loading.value = false }
   }
 }
 
 const loadHistory = (item: HistoryItem) => {
-  imageUrl.value = item.imageUrl
-  detections.value = item.detections
-  activeIndex.value = null
-  setTimeout(drawCanvas, 50)
+  const img = new Image()
+  img.src = item.imageUrl
+  img.onload = () => {
+    imageObj.value = img
+    detections.value = item.detections
+    resetTransform()
+  }
 }
 
 onMounted(() => {
-  const saved = localStorage.getItem('history')
-  if (saved) historyList.value = JSON.parse(saved)
   window.addEventListener('resize', drawCanvas)
 })
 </script>
@@ -171,87 +198,85 @@ onMounted(() => {
         <div class="logo-box">🐾</div>
         <div class="title-group">
           <h1>DeepAnimalVision</h1>
-          <p>AI 实时分析平台</p>
+          <p>AI 识别与细节分析控制台</p>
         </div>
       </div>
-      <button v-if="historyList.length" @click="clearHistory" class="btn-ghost-red">清空所有历史</button>
     </header>
 
     <main class="app-content">
       <section class="viewport-section">
-        <div class="canvas-container" :class="{ 'is-loading': loading }">
-          <div v-if="loading" class="loading-overlay">
-            <div class="scanner-line"></div>
-            <div class="loading-card">
-              <div class="spinner"></div>
-              <p>正在进行 AI 神经元扫描...</p>
-            </div>
+        <div class="canvas-container" 
+             @mousedown="startDrag" 
+             @mousemove="onDrag" 
+             @mouseup="stopDrag" 
+             @mouseleave="stopDrag"
+             :class="{ 'dragging': transform.isDragging }">
+          
+          <div class="floating-toolbar" v-if="imageUrl && !loading">
+            <button @click="handleZoom(0.2)">🔍+</button>
+            <button @click="handleZoom(-0.2)">🔍-</button>
+            <button @click="resetTransform">🔄</button>
+            <div class="v-line"></div>
+            <button @click="saveAsImage" class="btn-save">💾 保存结果图</button>
           </div>
 
-          <canvas v-show="imageUrl && !loading" ref="canvasRef"></canvas>
+          <div v-if="loading" class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <p>正在分析高精图像...</p>
+          </div>
+
+          <canvas ref="canvasRef"></canvas>
           
           <div v-if="!imageUrl && !loading" class="canvas-placeholder">
-            <div class="guide-box">
-              <div class="guide-icon">📤</div>
-              <h3>暂无待处理图像</h3>
-              <p>请点击下方按钮上传需要识别的图片</p>
+            <div class="placeholder-content">
+              <span class="icon">🖼️</span>
+              <h3>准备就绪</h3>
+              <p>请上传图像以激活 AI 检测</p>
             </div>
           </div>
         </div>
 
         <div class="action-bar">
-          <label class="btn-main" :class="{ 'disabled': loading }">
-            <span>{{ loading ? '识别处理中...' : '选择并上传图片' }}</span>
+          <label class="btn-primary" :class="{ 'is-loading': loading }">
+            <span>{{ loading ? '识别中...' : '📂 选择本地图像' }}</span>
             <input type="file" accept="image/*" @change="onFileChange" :disabled="loading" />
           </label>
-          <button v-if="detections.length" @click="exportResult" class="btn-outline">
-            📥 下载分析报告
-          </button>
+          <button v-if="detections.length" @click="exportResult" class="btn-secondary">📥 导出 JSON</button>
         </div>
       </section>
 
-      <aside class="data-section">
-        <div class="panel">
-          <div class="panel-header"><h3>⏳ 历史回顾</h3></div>
-          <div class="panel-body">
-            <div v-if="historyList.length" class="history-grid">
-              <div v-for="(item, index) in historyList" :key="index" class="history-card" @click="loadHistory(item)">
-                <div class="h-info">
-                  <span class="h-time">{{ item.time }}</span>
-                  <span class="h-tag">{{ item.detections.length }} 个目标</span>
-                </div>
-                <button @click.stop="deleteHistory(index)" class="h-del">✕</button>
+      <aside class="sidebar-section">
+        <div class="card history-card">
+          <div class="card-header">历史记录</div>
+          <div class="card-body">
+            <div v-for="(item, idx) in historyList" :key="idx" class="item" @click="loadHistory(item)">
+              <div class="item-info">
+                <span class="time">{{ item.time }}</span>
+                <span class="count">{{ item.detections.length }} 个目标</span>
               </div>
             </div>
-            <div v-else class="empty-state">尚无记录</div>
+            <div v-if="!historyList.length" class="empty">无记录</div>
           </div>
         </div>
 
-        <div class="panel">
-          <div class="panel-header">
-            <h3>🎯 识别列表</h3>
+        <div class="card result-card">
+          <div class="card-header">
+            检测结果
             <span class="badge" v-if="detections.length">{{ detections.length }}</span>
           </div>
-          <div class="panel-body">
-            <template v-if="detections.length">
-              <div class="stats-row">
-                <div v-for="s in stats" :key="s.label" class="stat-tag" :style="{ background: s.color + '15', color: s.color }">
-                  {{ s.label }} ({{ s.count }})
-                </div>
+          <div class="card-body">
+            <div class="stats">
+              <div v-for="s in stats" :key="s.label" class="stat-pill" :style="{ background: s.color + '20', color: s.color }">
+                {{ s.label }} ({{ s.count }})
               </div>
-              <div class="det-list">
-                <div 
-                  v-for="(det, index) in detections" :key="index"
-                  class="det-row" :class="{ 'active': activeIndex === index }"
-                  @click="activeIndex = index; drawCanvas()"
-                >
-                  <div class="det-indicator" :style="{ background: colorMap[det.class_id] || '#8b5cf6' }"></div>
-                  <span class="det-name">{{ classMap[det.class_id] || '未知' }}</span>
-                  <span class="det-score">{{ (det.confidence * 100).toFixed(0) }}%</span>
-                </div>
+            </div>
+            <div class="det-list">
+              <div v-for="(det, i) in detections" :key="i" class="det-item" :class="{ active: activeIndex === i }" @click="activeIndex = i; drawCanvas()">
+                <i :style="{ background: colorMap[det.class_id] || '#8b5cf6' }"></i>
+                <span class="name">{{ classMap[det.class_id] || '未知' }}</span>
+                <span class="conf">{{ (det.confidence * 100).toFixed(0) }}%</span>
               </div>
-            </template>
-            <div v-else class="empty-state">等待任务</div>
+            </div>
           </div>
         </div>
       </aside>
@@ -261,209 +286,108 @@ onMounted(() => {
 
 <style scoped>
 .app-shell {
-  --primary: #4F46E5;
-  --bg-app: #F8FAFC;
-  --bg-panel: #FFFFFF;
-  --bg-canvas: #FFFFFF; /* 改为纯白，更亮 */
-  --border: #E2E8F0;
-  --text-main: #0F172A;
-  --text-sub: #64748B;
+  --primary: #4f46e5;
+  --bg: #f8fafc;
+  --text: #1e293b;
+  --border: #e2e8f0;
   height: 100vh;
+  background: var(--bg);
+  color: var(--text);
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-app);
-  color: var(--text-main);
   font-family: system-ui, -apple-system, sans-serif;
-  overflow: hidden;
 }
 
-/* Header */
 .app-header {
-  height: 64px;
+  background: white;
   padding: 0 24px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
+  height: 60px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
 }
-.brand { display: flex; align-items: center; gap: 12px; }
-.logo-box { font-size: 24px; background: #EEF2FF; padding: 6px; border-radius: 8px; }
-.title-group h1 { margin: 0; font-size: 18px; font-weight: 800; color: var(--text-main); }
-.title-group p { margin: 0; font-size: 12px; color: var(--text-sub); }
 
-/* Layout */
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo-box { background: #eef2ff; padding: 6px; border-radius: 8px; font-size: 20px; }
+.title-group h1 { font-size: 16px; margin: 0; font-weight: 800; color: var(--primary); }
+.title-group p { font-size: 11px; margin: 0; color: #64748b; }
+
 .app-content {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 24px;
-  padding: 24px;
+  grid-template-columns: 1fr 300px;
+  gap: 20px;
+  padding: 20px;
   min-height: 0;
 }
 
-/* Viewport Section */
-.viewport-section {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  min-height: 0;
-}
+.viewport-section { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
 
 .canvas-container {
-  flex: 1; /* 占据剩余所有空间 */
-  background: var(--bg-canvas);
-  border-radius: 20px;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  flex: 1;
+  background: white;
+  border-radius: 16px;
   border: 1px solid var(--border);
-  box-shadow: 0 4px 20px -5px rgba(0,0,0,0.05);
+  position: relative;
   overflow: hidden;
-  /* 确保即使没图片也有体量感 */
-  min-height: 400px;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+  cursor: grab;
 }
+.canvas-container.dragging { cursor: grabbing; }
 
-/* 扫描动画遮罩 */
-.loading-overlay {
+.floating-toolbar {
   position: absolute;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(4px);
-  z-index: 10;
+  top: 12px;
+  right: 12px;
+  background: rgba(255,255,255,0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  padding: 6px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 4px;
+  z-index: 10;
 }
-
-.scanner-line {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background: linear-gradient(to right, transparent, var(--primary), transparent);
-  animation: scan 2s linear infinite;
+.floating-toolbar button {
+  border: none; background: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
 }
+.floating-toolbar button:hover { background: #f1f5f9; }
+.v-line { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
+.btn-save { color: var(--primary); }
 
-@keyframes scan {
-  0% { top: 0%; }
-  100% { top: 100%; }
+canvas { width: 100%; height: 100%; display: block; }
+
+.loading-overlay {
+  position: absolute; inset: 0; background: rgba(255,255,255,0.8); z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
-
-.loading-card { text-align: center; }
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #E2E8F0;
-  border-top-color: var(--primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin: 0 auto 16px;
-}
-
+.loading-spinner { width: 30px; height: 30px; border: 3px solid #e2e8f0; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-canvas {
-  /* 关键：Canvas 大小由 JS 动态计算，此处确保不溢出 */
-  max-width: 100%;
-  max-height: 100%;
-  display: block;
-}
+.action-bar { display: flex; gap: 12px; }
+.btn-primary { flex: 1; background: var(--primary); color: white; padding: 12px; border-radius: 10px; text-align: center; font-weight: 700; cursor: pointer; }
+.btn-primary.is-loading { opacity: 0.7; }
+.btn-primary input { display: none; }
+.btn-secondary { background: white; border: 1px solid var(--border); padding: 0 20px; border-radius: 10px; font-weight: 600; cursor: pointer; }
 
-.canvas-placeholder {
-  text-align: center;
-  color: var(--text-sub);
-}
-.guide-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+.sidebar-section { display: flex; flex-direction: column; gap: 20px; min-height: 0; }
+.card { background: white; border-radius: 16px; border: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+.history-card { flex: 0.35; }
+.result-card { flex: 0.65; }
+.card-header { padding: 14px 16px; font-size: 13px; font-weight: 800; border-bottom: 1px solid #f8fafc; display: flex; justify-content: space-between; }
+.card-body { flex: 1; overflow-y: auto; padding: 12px; }
 
-/* Action Bar */
-.action-bar { display: flex; gap: 16px; flex-shrink: 0; }
-.btn-main {
-  flex: 1;
-  background: var(--primary);
-  color: white;
-  padding: 14px;
-  border-radius: 12px;
-  text-align: center;
-  cursor: pointer;
-  font-weight: 700;
-  transition: all 0.2s;
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
-}
-.btn-main:hover:not(.disabled) { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(79, 70, 229, 0.4); }
-.btn-main.disabled { opacity: 0.6; cursor: not-allowed; }
-.btn-main input { display: none; }
+.item { padding: 10px; background: #f8fafc; border-radius: 8px; margin-bottom: 8px; cursor: pointer; font-size: 12px; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.stat-pill { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.det-item { display: flex; align-items: center; padding: 10px; background: #f8fafc; border-radius: 8px; margin-bottom: 6px; cursor: pointer; border: 1px solid transparent; }
+.det-item.active { border-color: var(--primary); background: #eef2ff; }
+.det-item i { width: 4px; height: 14px; border-radius: 2px; margin-right: 10px; }
+.name { flex: 1; font-weight: 700; font-size: 13px; }
+.conf { font-size: 12px; color: #64748b; }
+.badge { background: var(--primary); color: white; padding: 1px 8px; border-radius: 10px; font-size: 10px; }
+.empty { text-align: center; color: #94a3b8; padding: 20px; font-size: 12px; }
 
-.btn-outline {
-  padding: 0 24px;
-  border: 1px solid var(--border);
-  background: white;
-  border-radius: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-/* Sidebar & Panels */
-.data-section { display: flex; flex-direction: column; gap: 20px; min-height: 0; }
-.panel {
-  background: white;
-  border-radius: 20px;
-  border: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-.panel:first-child { flex: 0.4; }
-.panel:last-child { flex: 0.6; }
-
-.panel-header { padding: 16px 20px; border-bottom: 1px solid var(--bg-app); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
-.panel-header h3 { margin: 0; font-size: 14px; font-weight: 800; }
-
-.panel-body { flex: 1; overflow-y: auto; padding: 12px; }
-
-/* History & Detection List */
-.history-card {
-  padding: 12px;
-  background: var(--bg-app);
-  border-radius: 10px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.h-time { display: block; font-size: 12px; font-weight: 700; }
-.h-tag { font-size: 11px; color: var(--text-sub); }
-.h-del { background: none; border: none; color: #CBD5E1; cursor: pointer; }
-.h-del:hover { color: #EF4444; }
-
-.stats-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.stat-tag { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
-
-.det-row {
-  display: flex;
-  align-items: center;
-  padding: 12px;
-  border-radius: 10px;
-  margin-bottom: 6px;
-  cursor: pointer;
-  border: 1px solid transparent;
-  background: var(--bg-app);
-}
-.det-row.active { border-color: var(--primary); background: #EEF2FF; }
-.det-indicator { width: 4px; height: 16px; border-radius: 2px; margin-right: 12px; }
-.det-name { flex: 1; font-weight: 700; font-size: 13px; }
-.det-score { font-size: 12px; color: var(--text-sub); font-weight: 600; }
-
-.badge { background: var(--primary); color: white; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 800; }
-.empty-state { height: 100%; display: flex; align-items: center; justify-content: center; color: #CBD5E1; font-size: 13px; }
-.btn-ghost-red { background: none; border: none; color: #EF4444; font-size: 12px; font-weight: 600; cursor: pointer; }
-
-/* 滚动条 */
-.panel-body::-webkit-scrollbar { width: 5px; }
-.panel-body::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
+.canvas-placeholder { height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; color: #94a3b8; }
+.icon { font-size: 40px; margin-bottom: 10px; display: block; opacity: 0.5; }
 </style>
