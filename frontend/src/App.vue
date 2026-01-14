@@ -1,5 +1,4 @@
 <script setup lang="ts">
-// 脚本部分完全保留，所有功能不变
 import { ref, onMounted, computed, reactive } from 'vue'
 import axios from 'axios'
 
@@ -11,7 +10,17 @@ const imageUrl = ref<string | null>(null)
 const activeIndex = ref<number | null>(null)
 const imageObj = ref<HTMLImageElement | null>(null)
 
-// 变换状态：缩放和平移
+/* ===== 后端历史记录 ===== */
+type HistoryItem = {
+  id: number
+  image: string
+  created_at: string
+  detections_count: number
+}
+
+const historyList = ref<HistoryItem[]>([])
+
+/* ===== 变换状态 ===== */
 const transform = reactive({
   scale: 1,
   offsetX: 0,
@@ -21,14 +30,7 @@ const transform = reactive({
   startY: 0
 })
 
-type HistoryItem = {
-  imageUrl: string
-  detections: any[]
-  time: string
-}
-const historyList = ref<HistoryItem[]>([])
-
-/* ===== 配置映射 ===== */
+/* ===== 映射配置 ===== */
 const classMap: Record<number, string> = { 0: '人', 5: '公交车', 11: '停车标志' }
 const colorMap: Record<number, string> = { 0: '#F43F5E', 5: '#3B82F6', 11: '#10B981' }
 
@@ -45,11 +47,31 @@ const stats = computed(() => {
   }))
 })
 
-/* ===== 缩放与平移逻辑 ===== */
+/* ===== 后端 API ===== */
+const loadRecords = async () => {
+  const res = await axios.get('http://127.0.0.1:8000/api/records/')
+  historyList.value = res.data.records
+
+}
+
+const loadHistory = async (item: HistoryItem) => {
+  const res = await axios.get(`http://127.0.0.1:8000/api/records/${item.id}/`)
+  detections.value = res.data.detections
+
+  const img = new Image()
+  img.src = res.data.image
+  img.onload = () => {
+    imageObj.value = img
+    imageUrl.value = res.data.image
+    resetTransform()
+  }
+}
+
+/* ===== 缩放与拖拽 ===== */
 const handleZoom = (delta: number) => {
-  const newScale = transform.scale + delta
-  if (newScale >= 0.2 && newScale <= 10) {
-    transform.scale = newScale
+  const next = transform.scale + delta
+  if (next >= 0.2 && next <= 10) {
+    transform.scale = next
     drawCanvas()
   }
 }
@@ -79,26 +101,7 @@ const stopDrag = () => {
   transform.isDragging = false
 }
 
-/* ===== 功能函数 ===== */
-const saveAsImage = () => {
-  if (!canvasRef.value) return
-  const link = document.createElement('a')
-  link.download = `Result_${Date.now()}.jpg`
-  link.href = canvasRef.value.toDataURL('image/jpeg', 0.9)
-  link.click()
-}
-
-const exportResult = () => {
-  const data = { time: new Date().toLocaleString(), detections: detections.value }
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `data_${Date.now()}.json`
-  a.click()
-}
-
-/* ===== 核心绘制逻辑 ===== */
+/* ===== 绘制 ===== */
 const drawCanvas = () => {
   if (!canvasRef.value || !imageObj.value) return
   const canvas = canvasRef.value
@@ -108,14 +111,11 @@ const drawCanvas = () => {
 
   canvas.width = wrapper.clientWidth
   canvas.height = wrapper.clientHeight
-
   ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-  // 图片缩放比例保持0.95，保证显示舒适
   const baseScale = Math.min(canvas.width / img.width, canvas.height / img.height) * 0.95
 
   ctx.save()
-  // 应用变换：移至中心 -> 应用平移偏移 -> 应用缩放
   ctx.translate(canvas.width / 2 + transform.offsetX, canvas.height / 2 + transform.offsetY)
   ctx.scale(transform.scale, transform.scale)
 
@@ -126,71 +126,53 @@ const drawCanvas = () => {
 
   ctx.drawImage(img, x, y, drawW, drawH)
 
-  // 绘制识别框
-  detections.value.forEach((det, index) => {
+  detections.value.forEach((det, i) => {
     const [x1, y1, x2, y2] = det.bbox.map((v: number) => v * baseScale)
-    const isActive = index === activeIndex.value
-    const color = isActive ? '#F59E0B' : (colorMap[det.class_id] || '#8B5CF6')
+    const color = i === activeIndex.value ? '#F59E0B' : (colorMap[det.class_id] || '#8B5CF6')
 
     ctx.strokeStyle = color
-    ctx.lineWidth = (isActive ? 4 : 2) / transform.scale // 线宽不随缩放变模糊
+    ctx.lineWidth = 2 / transform.scale
     ctx.strokeRect(x + x1, y + y1, x2 - x1, y2 - y1)
-
-    // 绘制标签
-    ctx.fillStyle = color
-    const label = `${classMap[det.class_id] || '物体'} ${(det.confidence * 100).toFixed(0)}%`
-    const fontSize = Math.max(10 / transform.scale, 8)
-    ctx.font = `bold ${fontSize}px sans-serif`
-    const txtWidth = ctx.measureText(label).width
-    
-    const tagH = 18 / transform.scale
-    ctx.fillRect(x + x1, y + y1 - tagH, txtWidth + 4 / transform.scale, tagH)
-    ctx.fillStyle = '#fff'
-    ctx.fillText(label, x + x1 + 2 / transform.scale, y + y1 - 4 / transform.scale)
   })
+
   ctx.restore()
 }
 
-/* ===== 交互处理 ===== */
-const onFileChange = async (event: Event) => {
-  const input = event.target as HTMLInputElement
+/* ===== 上传识别 ===== */
+const onFileChange = async (e: Event) => {
+  const input = e.target as HTMLInputElement
   if (!input.files?.[0]) return
+
   const file = input.files[0]
-  
   imageUrl.value = URL.createObjectURL(file)
+
   const img = new Image()
   img.src = imageUrl.value
   img.onload = async () => {
     imageObj.value = img
     resetTransform()
-    
+
     const formData = new FormData()
     formData.append('image', file)
+
     loading.value = true
     try {
       const res = await axios.post('http://127.0.0.1:8000/api/detect/', formData)
       detections.value = res.data.detections
       drawCanvas()
-      historyList.value.unshift({ imageUrl: imageUrl.value!, detections: res.data.detections, time: new Date().toLocaleTimeString() })
-    } catch (e) { alert('后端连接失败') }
-    finally { loading.value = false }
-  }
-}
-
-const loadHistory = (item: HistoryItem) => {
-  const img = new Image()
-  img.src = item.imageUrl
-  img.onload = () => {
-    imageObj.value = img
-    detections.value = item.detections
-    resetTransform()
+      await loadRecords() // 🔥 同步后端历史
+    } finally {
+      loading.value = false
+    }
   }
 }
 
 onMounted(() => {
+  loadRecords()
   window.addEventListener('resize', drawCanvas)
 })
 </script>
+
 
 <template>
   <div class="app-shell">
@@ -255,7 +237,7 @@ onMounted(() => {
             <div v-for="(item, idx) in historyList" :key="idx" class="item" @click="loadHistory(item)">
               <div class="item-info">
                 <span class="time">{{ item.time }}</span>
-                <span class="count">{{ item.detections.length }} 个目标</span>
+                <span>{{ item.detections_count }} 个目标</span>
               </div>
             </div>
             <div v-if="!historyList.length" class="empty">无记录</div>
