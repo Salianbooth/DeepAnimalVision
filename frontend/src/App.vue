@@ -1,44 +1,106 @@
 <script setup lang="ts">
+/**
+ * DeepAnimalVision - AI 目标检测控制台
+ * 核心逻辑说明：
+ * 1. 状态管理：管理画布引用、识别数据、缩放平移参数、历史记录。
+ * 2. 归一化 (normalizeDetections)：统一后端不同接口返回的数据格式。
+ * 3. 渲染引擎 (drawCanvas)：处理 Canvas 缩放、平移以及 Bounding Box 的坐标映射。
+ * 4. 交互：实现类似 Photoshop 的拖拽与滚轮缩放逻辑。
+ */
 import { ref, onMounted, computed, reactive } from 'vue'
 import axios from 'axios'
 
-/* ===== 核心状态 ===== */
-const canvasRef = ref<HTMLCanvasElement | null>(null)
-const detections = ref<any[]>([])
-const loading = ref(false)
-const imageUrl = ref<string | null>(null)
-const activeIndex = ref<number | null>(null)
-const imageObj = ref<HTMLImageElement | null>(null)
+/* ========================================================================
+   核心状态 (Reactive State)
+   ======================================================================== */
+const canvasRef = ref<HTMLCanvasElement | null>(null) // Canvas 元素引用
+const detections = ref<any[]>([])                    // 当前图片的检测结果列表
+const loading = ref(false)                           // 识别请求状态
+const imageUrl = ref<string | null>(null)            // 图片的 Blob 或 URL
+const activeIndex = ref<number | null>(null)         // 侧边栏选中目标的索引
+const imageObj = ref<HTMLImageElement | null>(null)  // 缓存的 HTML Image 对象，用于重绘
 
-/* ===== 后端历史记录 ===== */
+/* ===== 历史记录相关 ===== */
 type HistoryItem = {
   id: number
   image: string
   created_at: string
   detections_count: number
 }
-
 const historyList = ref<HistoryItem[]>([])
 
-/* ===== 变换状态 ===== */
+/* ===== 画布变换状态 (平移/缩放) ===== */
 const transform = reactive({
-  scale: 1,
-  offsetX: 0,
-  offsetY: 0,
-  isDragging: false,
-  startX: 0,
+  scale: 1,         // 缩放倍数
+  offsetX: 0,       // X轴偏移
+  offsetY: 0,       // Y轴偏移
+  isDragging: false, // 是否正在拖拽
+  startX: 0,        // 拖拽起点坐标
   startY: 0
 })
 
-/* ===== 映射配置 ===== */
-const classMap: Record<number, string> = { 0: '人', 5: '公交车', 11: '停车标志' }
-const colorMap: Record<number, string> = { 0: '#F43F5E', 5: '#3B82F6', 11: '#10B981' }
+/* ========================================================================
+   映射配置 (Mapping & Configuration)
+   ======================================================================== */
+const classMap: Record<number, string> = {
+  0: '人',
+  5: '公交车',
+  11: '停车标志'
+}
 
-/* ===== 分类统计 ===== */
+const labelMap: Record<string, number> = {
+  person: 0,
+  bus: 5,
+  'stop sign': 11
+}
+
+const colorMap: Record<number, string> = {
+  0: '#F43F5E', // 红色系
+  5: '#3B82F6', // 蓝色系
+  11: '#10B981' // 绿色系
+}
+
+/* ========================================================================
+   数据处理逻辑 (Data Processing)
+   ======================================================================== */
+
+/**
+ * 统一归一化后端数据
+ * 解决后端 'detect' 接口与 'records' 接口字段名不一致的问题
+ */
+const normalizeDetections = (raw: any[]) => {
+  return raw.map(det => {
+    // 兼容 records 接口 (带 label 字段)
+    if (det.label && det.x1 !== undefined) {
+      const classId = labelMap[det.label] ?? -1
+      return {
+        class_id: classId,
+        label: classMap[classId] || '未知',
+        confidence: det.confidence,
+        bbox: [det.x1, det.y1, det.x2, det.y2]
+      }
+    }
+
+    // 兼容 detect 接口 (直接带 class_id)
+    return {
+      class_id: det.class_id,
+      label: classMap[det.class_id] || '未知',
+      confidence: det.confidence,
+      bbox: det.bbox
+    }
+  })
+}
+
+/**
+ * 分类统计 (Computed)
+ * 实时计算右侧面板中的分类药丸标签 (Stats Pill)
+ */
 const stats = computed(() => {
   const map: Record<number, number> = {}
   detections.value.forEach(det => {
-    map[det.class_id] = (map[det.class_id] || 0) + 1
+    if (det.class_id >= 0) {
+      map[det.class_id] = (map[det.class_id] || 0) + 1
+    }
   })
   return Object.keys(map).map(id => ({
     label: classMap[Number(id)] || `类别 ${id}`,
@@ -47,27 +109,37 @@ const stats = computed(() => {
   }))
 })
 
-/* ===== 后端 API ===== */
+/* ========================================================================
+   API 调用 (Backend API)
+   ======================================================================== */
+
+// 获取所有检测历史
 const loadRecords = async () => {
   const res = await axios.get('http://127.0.0.1:8000/api/records/')
   historyList.value = res.data.records
-
 }
 
+// 加载某条具体的历史详情
 const loadHistory = async (item: HistoryItem) => {
   const res = await axios.get(`http://127.0.0.1:8000/api/records/${item.id}/`)
-  detections.value = res.data.detections
+  detections.value = normalizeDetections(res.data.detections)
 
+  const imgUrl = `http://127.0.0.1:8000${res.data.image}`
   const img = new Image()
-  img.src = res.data.image
+  img.src = imgUrl
   img.onload = () => {
     imageObj.value = img
-    imageUrl.value = res.data.image
-    resetTransform()
+    imageUrl.value = imgUrl
+    resetTransform() // 重置缩放位置
+    drawCanvas()     // 绘制到画布
   }
 }
 
-/* ===== 缩放与拖拽 ===== */
+/* ========================================================================
+   交互逻辑 (Interaction: Zoom & Drag)
+   ======================================================================== */
+
+// 缩放处理
 const handleZoom = (delta: number) => {
   const next = transform.scale + delta
   if (next >= 0.2 && next <= 10) {
@@ -76,6 +148,7 @@ const handleZoom = (delta: number) => {
   }
 }
 
+// 重置视图
 const resetTransform = () => {
   transform.scale = 1
   transform.offsetX = 0
@@ -83,6 +156,7 @@ const resetTransform = () => {
   drawCanvas()
 }
 
+// 鼠标按下：开始拖拽
 const startDrag = (e: MouseEvent) => {
   if (!imageUrl.value) return
   transform.isDragging = true
@@ -90,6 +164,7 @@ const startDrag = (e: MouseEvent) => {
   transform.startY = e.clientY - transform.offsetY
 }
 
+// 鼠标移动：更新偏移量并重绘
 const onDrag = (e: MouseEvent) => {
   if (!transform.isDragging) return
   transform.offsetX = e.clientX - transform.startX
@@ -97,11 +172,15 @@ const onDrag = (e: MouseEvent) => {
   drawCanvas()
 }
 
+// 停止拖拽
 const stopDrag = () => {
   transform.isDragging = false
 }
 
-/* ===== 绘制 ===== */
+/* ========================================================================
+   绘制引擎 (Canvas Rendering)
+   ======================================================================== */
+
 const drawCanvas = () => {
   if (!canvasRef.value || !imageObj.value) return
   const canvas = canvasRef.value
@@ -109,13 +188,16 @@ const drawCanvas = () => {
   const img = imageObj.value
   const wrapper = canvas.parentElement!
 
+  // 1. 同步容器尺寸，防止像素拉伸
   canvas.width = wrapper.clientWidth
   canvas.height = wrapper.clientHeight
   ctx.clearRect(0, 0, canvas.width, canvas.height)
 
+  // 2. 计算基础适配比例 (保持宽高比并填满 95% 容器)
   const baseScale = Math.min(canvas.width / img.width, canvas.height / img.height) * 0.95
 
   ctx.save()
+  // 3. 应用平移与缩放 (以画布中心为锚点)
   ctx.translate(canvas.width / 2 + transform.offsetX, canvas.height / 2 + transform.offsetY)
   ctx.scale(transform.scale, transform.scale)
 
@@ -124,13 +206,21 @@ const drawCanvas = () => {
   const x = -drawW / 2
   const y = -drawH / 2
 
+  // 4. 绘制原始图像
   ctx.drawImage(img, x, y, drawW, drawH)
 
+  // 5. 绘制所有检测框 (BBoxes)
   detections.value.forEach((det, i) => {
+    // 关键：将后端返回的原始像素坐标映射到 Canvas 绘图坐标
     const [x1, y1, x2, y2] = det.bbox.map((v: number) => v * baseScale)
-    const color = i === activeIndex.value ? '#F59E0B' : (colorMap[det.class_id] || '#8B5CF6')
+    
+    // 如果是侧边栏选中的目标，使用高亮色（橘色）
+    const color = i === activeIndex.value
+      ? '#F59E0B'
+      : (colorMap[det.class_id] || '#8B5CF6')
 
     ctx.strokeStyle = color
+    // 补偿线宽：防止放大后线条变得过粗
     ctx.lineWidth = 2 / transform.scale
     ctx.strokeRect(x + x1, y + y1, x2 - x1, y2 - y1)
   })
@@ -138,13 +228,16 @@ const drawCanvas = () => {
   ctx.restore()
 }
 
-/* ===== 上传识别 ===== */
+/* ========================================================================
+   文件上传与导出 (Upload & Export)
+   ======================================================================== */
+
 const onFileChange = async (e: Event) => {
   const input = e.target as HTMLInputElement
   if (!input.files?.[0]) return
 
   const file = input.files[0]
-  imageUrl.value = URL.createObjectURL(file)
+  imageUrl.value = URL.createObjectURL(file) // 生成本地预览图
 
   const img = new Image()
   img.src = imageUrl.value
@@ -152,23 +245,26 @@ const onFileChange = async (e: Event) => {
     imageObj.value = img
     resetTransform()
 
+    // 封装 FormData 发送给后端
     const formData = new FormData()
     formData.append('image', file)
 
     loading.value = true
     try {
       const res = await axios.post('http://127.0.0.1:8000/api/detect/', formData)
-      detections.value = res.data.detections
+      detections.value = normalizeDetections(res.data.detections)
       drawCanvas()
-      await loadRecords() // 🔥 同步后端历史
+      await loadRecords() // 刷新历史列表
     } finally {
       loading.value = false
     }
   }
 }
 
+// 初始化加载
 onMounted(() => {
   loadRecords()
+  // 响应式处理：窗口大小改变时自动重绘画布
   window.addEventListener('resize', drawCanvas)
 })
 </script>
