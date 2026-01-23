@@ -9,9 +9,6 @@ from django.core.files.base import ContentFile
 
 @csrf_exempt
 def detect(request):
-    """
-    上传图片进行 YOLO 识别，并存储结果到数据库
-    """
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
 
@@ -19,24 +16,18 @@ def detect(request):
     if not image:
         return JsonResponse({"error": "No image uploaded"}, status=400)
 
-    # 临时保存图片
-    save_path = os.path.join("temp.jpg")
-    with open(save_path, "wb+") as f:
-        for chunk in image.chunks():
-            f.write(chunk)
-
-    # 调 YOLO 识别
-    results = detect_image(save_path)
-
-    # 保存 Record 到数据库
-    record = Record(
-        image=ContentFile(image.read(), name=image.name),
+    # 1️⃣ 把上传文件直接存成 Record（Django 自动写磁盘）
+    record = Record.objects.create(
+        image=image,
         image_width=image.image.width if hasattr(image, "image") else 0,
         image_height=image.image.height if hasattr(image, "image") else 0
     )
-    record.save()
 
-    # 保存每个 Detection
+    # 2️⃣ 用“已经保存到磁盘的图片路径”做 YOLO 推理
+    image_path = record.image.path
+    results = detect_image(image_path)
+
+    # 3️⃣ 保存 Detection
     for det in results:
         Detection.objects.create(
             record=record,
@@ -45,19 +36,24 @@ def detect(request):
             x1=det["bbox"][0],
             y1=det["bbox"][1],
             x2=det["bbox"][2],
-            y2=det["bbox"][3]
+            y2=det["bbox"][3],
         )
 
-    return JsonResponse({"detections": results, "record_id": record.id})
+    return JsonResponse({
+        "record_id": record.id,
+        "detections": results
+    })
 
 
 def record_list(request):
     """
-    获取历史记录列表
+    接口：获取所有历史识别记录列表（分页/简略信息）
+    请求方法：GET
     """
     if request.method != "GET":
-        return JsonResponse({"error": "GET only"}, status=405)
+        return JsonResponse({"error": "仅支持 GET 请求"}, status=405)
 
+    # 按时间倒序查询所有记录
     records = Record.objects.order_by("-created_at")
     data = []
     for r in records:
@@ -65,7 +61,7 @@ def record_list(request):
             "id": r.id,
             "image": r.image.url if r.image else "",
             "time": r.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-            "count": r.detections.count()
+            "count": r.detections.count()  # 统计该记录下检测到的物体数量
         })
 
     return JsonResponse({"records": data})
@@ -73,16 +69,18 @@ def record_list(request):
 
 def record_detail(request, record_id):
     """
-    获取某条记录的详细信息（包含每个检测框）
+    接口：根据 ID 获取某条记录的详细信息，包含所有的检测框坐标
+    请求方法：GET
     """
     if request.method != "GET":
-        return JsonResponse({"error": "GET only"}, status=405)
+        return JsonResponse({"error": "仅支持 GET 请求"}, status=405)
 
     try:
         record = Record.objects.get(id=record_id)
     except Record.DoesNotExist:
-        return JsonResponse({"error": "Record not found"}, status=404)
+        return JsonResponse({"error": "找不到该记录"}, status=404)
 
+    # 序列化该记录下的所有检测详情
     detections = []
     for d in record.detections.all():
         detections.append({
@@ -104,16 +102,18 @@ def record_detail(request, record_id):
 @csrf_exempt
 def record_delete(request, record_id):
     """
-    删除单条历史记录
+    接口：根据 ID 删除特定的历史记录（及其关联的检测详情）
+    请求方法：DELETE
     """
     if request.method != "DELETE":
-        return JsonResponse({"error": "DELETE only"}, status=405)
+        return JsonResponse({"error": "仅支持 DELETE 请求"}, status=405)
 
     try:
         record = Record.objects.get(id=record_id)
     except Record.DoesNotExist:
-        return JsonResponse({"error": "Record not found"}, status=404)
+        return JsonResponse({"error": "记录已不存在"}, status=404)
 
+    # 删除记录（Django 默认会级联删除关联的 Detection）
     record.delete()
     return JsonResponse({"success": True})
 
@@ -121,10 +121,12 @@ def record_delete(request, record_id):
 @csrf_exempt
 def record_clear(request):
     """
-    删除所有历史记录
+    接口：清空数据库中所有的历史识别记录
+    请求方法：DELETE
     """
     if request.method != "DELETE":
-        return JsonResponse({"error": "DELETE only"}, status=405)
+        return JsonResponse({"error": "仅支持 DELETE 请求"}, status=405)
 
+    # 删除所有记录
     Record.objects.all().delete()
     return JsonResponse({"success": True})
