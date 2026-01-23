@@ -21,6 +21,7 @@ class Detection(models.Model):
         on_delete=models.CASCADE
     )
 
+    # class_id = models.IntegerField()
     label = models.CharField(max_length=50)
     confidence = models.FloatField()
 

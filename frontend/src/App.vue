@@ -70,18 +70,19 @@ const colorMap: Record<number, string> = {
  */
 const normalizeDetections = (raw: any[]) => {
   return raw.map(det => {
-    // 兼容 records 接口 (带 label 字段)
-    if (det.label && det.x1 !== undefined) {
+    // ===== 来自 records 接口（label + bbox）=====
+    if (det.label && Array.isArray(det.bbox)) {
       const classId = labelMap[det.label] ?? -1
+
       return {
         class_id: classId,
-        label: classMap[classId] || '未知',
+        label: classMap[classId] || det.label || '未知',
         confidence: det.confidence,
-        bbox: [det.x1, det.y1, det.x2, det.y2]
+        bbox: det.bbox
       }
     }
 
-    // 兼容 detect 接口 (直接带 class_id)
+    // ===== 来自 detect 接口（class_id + bbox）=====
     return {
       class_id: det.class_id,
       label: classMap[det.class_id] || '未知',

@@ -6,6 +6,11 @@ from .models import Record, Detection
 from recognition.detector import detect_image
 from django.core.files.base import ContentFile
 
+YOLO_CLASS_MAP = {
+    0: "person",
+    5: "bus",
+    11: "stop sign",
+}
 
 @csrf_exempt
 def detect(request):
@@ -29,14 +34,17 @@ def detect(request):
 
     # 3️⃣ 保存 Detection
     for det in results:
+        class_id = det["class_id"]
+
         Detection.objects.create(
             record=record,
-            label=det.get("label", "未知"),
-            confidence=det.get("confidence", 0),
+            # class_id=class_id,
+            label=YOLO_CLASS_MAP.get(class_id, "未知"),
+            confidence=det["confidence"],
             x1=det["bbox"][0],
             y1=det["bbox"][1],
             x2=det["bbox"][2],
-            y2=det["bbox"][3],
+            y2=det["bbox"][3]
         )
 
     return JsonResponse({
@@ -47,47 +55,61 @@ def detect(request):
 
 def record_list(request):
     """
-    接口：获取所有历史识别记录列表（分页/简略信息）
-    请求方法：GET
+    接口：获取所有历史识别记录列表
     """
     if request.method != "GET":
         return JsonResponse({"error": "仅支持 GET 请求"}, status=405)
 
-    # 按时间倒序查询所有记录
+    # --- 控制台打印：开始获取列表 ---
+    print(f"\n[INFO] 正在获取识别记录列表...")
+
     records = Record.objects.order_by("-created_at")
     data = []
     for r in records:
+        detection_count = r.detections.count()
         data.append({
             "id": r.id,
             "image": r.image.url if r.image else "",
             "time": r.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-            "count": r.detections.count()  # 统计该记录下检测到的物体数量
+            "count": detection_count
         })
+
+    # --- 控制台打印：结果统计 ---
+    print(f">>> 成功检索到 {len(data)} 条记录")
 
     return JsonResponse({"records": data})
 
 
 def record_detail(request, record_id):
     """
-    接口：根据 ID 获取某条记录的详细信息，包含所有的检测框坐标
-    请求方法：GET
+    接口：根据 ID 获取某条记录的详细信息
     """
     if request.method != "GET":
         return JsonResponse({"error": "仅支持 GET 请求"}, status=405)
 
+    # --- 控制台打印：请求详情 ---
+    print(f"\n[INFO] 正在查询记录详情 - ID: {record_id}")
+
     try:
         record = Record.objects.get(id=record_id)
     except Record.DoesNotExist:
+        # --- 控制台打印：错误警告 ---
+        print(f">>> [ERROR] 未找到 ID 为 {record_id} 的记录！")
         return JsonResponse({"error": "找不到该记录"}, status=404)
 
-    # 序列化该记录下的所有检测详情
     detections = []
     for d in record.detections.all():
         detections.append({
+            # "class_id": d.class_id,
             "label": d.label,
             "confidence": d.confidence,
             "bbox": [d.x1, d.y1, d.x2, d.y2]
         })
+
+    # --- 控制台打印：详细信息结果 ---
+    print(f">>> 查询成功：图片尺寸 {record.image_width}x{record.image_height}，检测到 {len(detections)} 个目标")
+    for det in detections:
+        print(f"    - 标签: {det['label']}, 置信度: {det['confidence']:.2f}")
 
     return JsonResponse({
         "id": record.id,
@@ -97,7 +119,6 @@ def record_detail(request, record_id):
         "detections": detections,
         "time": record.created_at.strftime("%Y-%m-%d %H:%M:%S")
     })
-
 
 @csrf_exempt
 def record_delete(request, record_id):
