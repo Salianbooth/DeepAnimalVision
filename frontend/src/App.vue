@@ -212,19 +212,50 @@ const drawCanvas = () => {
 
   // 5. 绘制所有检测框 (BBoxes)
   detections.value.forEach((det, i) => {
-    // 关键：将后端返回的原始像素坐标映射到 Canvas 绘图坐标
-    const [x1, y1, x2, y2] = det.bbox.map((v: number) => v * baseScale)
-    
-    // 如果是侧边栏选中的目标，使用高亮色（橘色）
-    const color = i === activeIndex.value
-      ? '#F59E0B'
-      : (colorMap[det.class_id] || '#8B5CF6')
+  const [x1, y1, x2, y2] = det.bbox.map((v: number) => v * baseScale)
 
-    ctx.strokeStyle = color
-    // 补偿线宽：防止放大后线条变得过粗
-    ctx.lineWidth = 2 / transform.scale
-    ctx.strokeRect(x + x1, y + y1, x2 - x1, y2 - y1)
-  })
+  const boxX = x + x1
+  const boxY = y + y1
+  const boxW = x2 - x1
+  const boxH = y2 - y1
+
+  const color = i === activeIndex.value
+    ? '#F59E0B'
+    : (colorMap[det.class_id] || '#8B5CF6')
+
+  // ===== 1. 画检测框 =====
+  ctx.strokeStyle = color
+  ctx.lineWidth = 2 / transform.scale
+  ctx.strokeRect(boxX, boxY, boxW, boxH)
+
+  // ===== 2. 画标签文字 =====
+  const labelText = `${det.label} ${(det.confidence * 100).toFixed(1)}%`
+
+  ctx.font = `${14 / transform.scale}px sans-serif`
+  ctx.textBaseline = 'top'
+
+  const textWidth = ctx.measureText(labelText).width
+  const textHeight = 16 / transform.scale
+  const padding = 4 / transform.scale
+
+  // 标签背景
+  ctx.fillStyle = color
+  ctx.fillRect(
+    boxX,
+    boxY - textHeight - padding * 2,
+    textWidth + padding * 2,
+    textHeight + padding * 2
+  )
+
+  // 标签文字
+  ctx.fillStyle = '#ffffff'
+  ctx.fillText(
+    labelText,
+    boxX + padding,
+    boxY - textHeight - padding
+  )
+})
+
 
   ctx.restore()
 }
