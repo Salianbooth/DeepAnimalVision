@@ -107,7 +107,8 @@ def record_detail(request, record_id):
         })
 
     # --- 控制台打印：详细信息结果 ---
-    print(f">>> 查询成功：图片尺寸 {record.image_width}x{record.image_height}，检测到 {len(detections)} 个目标")
+    time_str = record.created_at.strftime('%Y-%m-%d %H:%M:%S')
+    print(f">>> 查询成功：时间 {time_str}，图片尺寸 {record.image_width}x{record.image_height}，检测到 {len(detections)} 个目标")
     for det in detections:
         print(f"    - 标签: {det['label']}, 置信度: {det['confidence']:.2f}")
 
