@@ -22,16 +22,21 @@ export interface Detection {
 export interface HistoryItem {
   id: number
   image: string
-  time: string
-  image_width?: number
-  image_height?: number
-  detections?: Detection[]
+  created_at: string
+  detections_count: number
 }
+
+export interface RecordDetail extends HistoryItem {
+  image_width: number
+  image_height: number
+  detections: Detection[]
+}
+
 
 export const useHistoryStore = defineStore('history', {
   state: () => ({
     historyList: [] as HistoryItem[],
-    current: null as HistoryItem | null,
+    current: null as RecordDetail | null,
     loading: false
   }),
 
@@ -44,11 +49,17 @@ export const useHistoryStore = defineStore('history', {
       this.loading = true
       try {
         const res = await getRecords()
-        this.historyList = res.data.records
+        // 双重兜底：API 层已经返回 records 数组，但再保险一下
+        this.historyList = Array.isArray(res.data.records) ? res.data.records : []
+      } catch (e) {
+        console.error('fetchHistoryList failed', e)
+        this.historyList = []
       } finally {
         this.loading = false
       }
-    },
+    }
+
+    ,
 
     /**
      * 获取某条记录详情，并设为当前记录
@@ -86,8 +97,8 @@ export const useHistoryStore = defineStore('history', {
     /**
      * 仅用于切换当前记录（不请求接口）
      */
-    select(item: HistoryItem) {
-      this.current = item
-    }
+    // select(item: HistoryItem) {
+    //   this.current = item
+    // }
   }
 })

@@ -1,31 +1,22 @@
-import axios from 'axios'
+import axios, { AxiosRequestConfig } from 'axios'
 
 const request = axios.create({
-  baseURL: '/api',     // 关键：对应 Django 的 /api/
-  timeout: 10000
+  baseURL: 'http://127.0.0.1:8000/api', // 指向 Django 后端
+  timeout: 10000,
 })
 
-/**
- * 请求拦截器
- */
+// 请求拦截器（可加 token 等）
 request.interceptors.request.use(
   config => {
-    // 如果后面有 token / 登录，这里统一加
+    // config.headers['Authorization'] = 'Bearer ...' // 如有需要
     return config
   },
-  error => {
-    return Promise.reject(error)
-  }
+  error => Promise.reject(error)
 )
 
-/**
- * 响应拦截器
- */
+// 响应拦截器
 request.interceptors.response.use(
-  response => {
-    // Django 默认 JsonResponse → response.data
-    return response
-  },
+  response => response,
   error => {
     console.error('API Error:', error)
     return Promise.reject(error)

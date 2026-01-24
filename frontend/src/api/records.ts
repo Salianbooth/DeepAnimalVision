@@ -2,32 +2,56 @@ import request from './request'
 
 /**
  * 获取历史记录列表
- * GET /api/records/
  */
-export function getRecords() {
-  return request.get('/records/')
+export const getRecords = async () => {
+  try {
+    const res = await request.get('/records/')
+    return {
+      data: {
+        records: Array.isArray(res.data.records) ? res.data.records : []
+      }
+    }
+  } catch (err) {
+    console.error('API getRecords failed', err)
+    return { data: { records: [] } }
+  }
 }
 
 /**
- * 获取某一条记录详情
- * GET /api/records/{id}/
+ * 获取某条记录详情
  */
-export function getRecordDetail(id: number) {
-  return request.get(`/records/${id}/`)
+export async function getRecordDetail(id: number) {
+  try {
+    const res = await request.get(`/records/${id}/`)
+    return res
+  } catch (err) {
+    console.error(`API getRecordDetail(${id}) failed`, err)
+    throw err
+  }
 }
 
 /**
  * 删除单条记录
- * DELETE /api/records/{id}/delete/
  */
-export function deleteRecord(id: number) {
-  return request.delete(`/records/${id}/delete/`)
+export async function deleteRecord(id: number) {
+  try {
+    const res = await request.delete(`/records/${id}/delete/`)
+    return res
+  } catch (err) {
+    console.error(`API deleteRecord(${id}) failed`, err)
+    throw err
+  }
 }
 
 /**
  * 清空所有记录
- * DELETE /api/records/clear/
  */
-export function clearRecords() {
-  return request.delete('/records/clear/')
+export async function clearRecords() {
+  try {
+    const res = await request.delete('/records/clear/')
+    return res
+  } catch (err) {
+    console.error('API clearRecords failed', err)
+    throw err
+  }
 }

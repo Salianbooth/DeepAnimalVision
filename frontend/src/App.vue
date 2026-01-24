@@ -21,15 +21,19 @@ const loading = ref(false)                           // 识别请求状态
 const imageUrl = ref<string | null>(null)            // 图片的 Blob 或 URL
 const activeIndex = ref<number | null>(null)         // 侧边栏选中目标的索引
 const imageObj = ref<HTMLImageElement | null>(null)  // 缓存的 HTML Image 对象，用于重绘
+const detections_count = computed(() => detections.value.length)
 
 /* ===== 历史记录相关 ===== */
-type HistoryItem = {
-  id: number
-  image: string
-  created_at: string
-  detections_count: number
-}
-const historyList = ref<HistoryItem[]>([])
+// type HistoryItem = {
+//   id: number
+//   image: string
+//   created_at: string
+//   detections_count: number
+// }
+// const historyList = ref<HistoryItem[]>([])
+/* ===== 历史记录（Pinia）===== */
+const historyStore = useHistoryStore()
+const { historyList, current, loading: historyLoading } = storeToRefs(historyStore)
 
 /* ===== 画布变换状态 (平移/缩放) ===== */
 const transform = reactive({
@@ -117,41 +121,83 @@ const stats = computed(() => {
    ======================================================================== */
 
 // 获取所有检测历史
+// const loadRecords = async () => {
+//   const res = await axios.get('http://127.0.0.1:8000/api/records/')
+//   historyList.value = res.data.records
+// }
+
 const loadRecords = async () => {
-  const res = await axios.get('http://127.0.0.1:8000/api/records/')
-  historyList.value = res.data.records
+  await historyStore.fetchHistoryList()
 }
 
+
 // 加载某条具体的历史详情
-const loadHistory = async (item: HistoryItem) => {
+// const loadHistory = async (item: HistoryItem) => {
+//   console.group(`📄 加载历史记录详情 - ID: ${item.id}`)
+//   console.log('【列表项 item】', item)
+
+//   try {
+//     const res = await axios.get(
+//       `http://127.0.0.1:8000/api/records/${item.id}/`
+//     )
+
+//     // 1️⃣ 打印后端返回的原始数据（最关键）
+//     console.log('【后端返回 record_detail 原始数据】', res.data)
+
+//     // 2️⃣ 打印关键字段（防止字段名不一致）
+//     console.table({
+//       id: res.data.id,
+//       created_at: res.data.created_at,
+//       image: res.data.image,
+//       image_width: res.data.image_width,
+//       image_height: res.data.image_height,
+//       detections_length: res.data.detections?.length
+//     })
+
+//     // 3️⃣ 单独打印 detections 详情
+//     console.log('【检测结果 detections】', res.data.detections)
+
+//     // === 原有逻辑 ===
+//     detections.value = normalizeDetections(res.data.detections)
+
+//     const imgUrl = `http://127.0.0.1:8000${res.data.image}`
+//     const img = new Image()
+//     img.src = imgUrl
+
+//     img.onload = () => {
+//       imageObj.value = img
+//       imageUrl.value = imgUrl
+//       resetTransform()
+//       drawCanvas()
+
+//       // 4️⃣ 图片加载完成后的状态确认
+//       console.log('【图片加载完成】', {
+//         imgUrl,
+//         naturalWidth: img.naturalWidth,
+//         naturalHeight: img.naturalHeight,
+//       })
+//     }
+
+//   } catch (err) {
+//     console.error('❌ 加载历史记录详情失败', err)
+//   } finally {
+//     console.groupEnd()
+//   }
+// }
+
+const loadHistory = async (item: { id: number }) => {
   console.group(`📄 加载历史记录详情 - ID: ${item.id}`)
-  console.log('【列表项 item】', item)
 
   try {
-    const res = await axios.get(
-      `http://127.0.0.1:8000/api/records/${item.id}/`
-    )
+    const record = await historyStore.fetchRecordDetail(item.id)
 
-    // 1️⃣ 打印后端返回的原始数据（最关键）
-    console.log('【后端返回 record_detail 原始数据】', res.data)
+    console.log('【Pinia current record】', record)
 
-    // 2️⃣ 打印关键字段（防止字段名不一致）
-    console.table({
-      id: res.data.id,
-      created_at: res.data.created_at,
-      image: res.data.image,
-      image_width: res.data.image_width,
-      image_height: res.data.image_height,
-      detections_length: res.data.detections?.length
-    })
+    // detections
+    detections.value = normalizeDetections(record.detections || [])
 
-    // 3️⃣ 单独打印 detections 详情
-    console.log('【检测结果 detections】', res.data.detections)
-
-    // === 原有逻辑 ===
-    detections.value = normalizeDetections(res.data.detections)
-
-    const imgUrl = `http://127.0.0.1:8000${res.data.image}`
+    // image
+    const imgUrl = `http://127.0.0.1:8000${record.image}`
     const img = new Image()
     img.src = imgUrl
 
@@ -160,38 +206,44 @@ const loadHistory = async (item: HistoryItem) => {
       imageUrl.value = imgUrl
       resetTransform()
       drawCanvas()
-
-      // 4️⃣ 图片加载完成后的状态确认
-      console.log('【图片加载完成】', {
-        imgUrl,
-        naturalWidth: img.naturalWidth,
-        naturalHeight: img.naturalHeight,
-      })
     }
 
   } catch (err) {
-    console.error('❌ 加载历史记录详情失败', err)
+    console.error('❌ 加载历史记录失败', err)
   } finally {
     console.groupEnd()
   }
 }
 
 
+
 // 删除单条历史记录
-const deleteHistory = async (item: HistoryItem) => {
+// const deleteHistory = async (item: HistoryItem) => {
+//   const ok = window.confirm('确认删除该历史记录吗？')
+//   if (!ok) return
+
+//   await axios.delete(`http://127.0.0.1:8000/api/records/${item.id}/delete/`)
+
+//   // 1. 前端移除该条记录
+//   historyList.value = historyList.value.filter(h => h.id !== item.id)
+
+//   // 2. 如果当前画布正在显示的是被删记录 → 清空画布
+//   if (imageUrl.value && imageUrl.value.includes(item.image)) {
+//     clearCanvasState()
+//   }
+// }
+
+const deleteHistory = async (item: { id: number }) => {
   const ok = window.confirm('确认删除该历史记录吗？')
   if (!ok) return
 
-  await axios.delete(`http://127.0.0.1:8000/api/records/${item.id}/delete/`)
+  await historyStore.removeRecord(item.id)
 
-  // 1. 前端移除该条记录
-  historyList.value = historyList.value.filter(h => h.id !== item.id)
-
-  // 2. 如果当前画布正在显示的是被删记录 → 清空画布
-  if (imageUrl.value && imageUrl.value.includes(item.image)) {
+  if (current.value?.id === item.id) {
     clearCanvasState()
   }
 }
+
 
 const clearCanvasState = () => {
   detections.value = []
@@ -365,11 +417,11 @@ const onFileChange = async (e: Event) => {
 }
 
 // 初始化加载
-onMounted(() => {
-  loadRecords()
-  // 响应式处理：窗口大小改变时自动重绘画布
+onMounted(async () => {
+  await historyStore.fetchHistoryList()
   window.addEventListener('resize', drawCanvas)
 })
+
 </script>
 
 
@@ -424,7 +476,14 @@ onMounted(() => {
             <span>{{ loading ? '识别中...' : '📂 选择本地图像' }}</span>
             <input type="file" accept="image/*" @change="onFileChange" :disabled="loading" />
           </label>
-          <button v-if="detections.length" @click="exportResult" class="btn-secondary">📥 导出 JSON</button>
+          <button
+            v-if="detections_count > 0"
+            @click="exportResult"
+            class="btn-secondary"
+          >
+            📥 导出 JSON
+          </button>
+
         </div>
       </section>
 
@@ -454,7 +513,10 @@ onMounted(() => {
               </button>
             </div>
 
-            <div v-if="!historyList.length" class="empty">无记录</div>
+            <div v-if="!historyList || historyList.length === 0" class="empty">
+              无记录
+            </div>
+
           </div>
         </div>
 
@@ -462,7 +524,10 @@ onMounted(() => {
         <div class="card result-card">
           <div class="card-header">
             检测结果
-            <span class="badge" v-if="detections.length">{{ detections.length }}</span>
+            <span class="badge" v-if="detections_count > 0">
+  {{ detections_count }}
+</span>
+
           </div>
           <div class="card-body">
             <div class="stats">
