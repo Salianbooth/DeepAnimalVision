@@ -9,6 +9,8 @@
  */
 import { ref, onMounted, computed, reactive } from 'vue'
 import axios from 'axios'
+import { storeToRefs } from 'pinia'
+import { useHistoryStore } from '@/store/history'
 
 /* ========================================================================
    核心状态 (Reactive State)
@@ -122,19 +124,88 @@ const loadRecords = async () => {
 
 // 加载某条具体的历史详情
 const loadHistory = async (item: HistoryItem) => {
-  const res = await axios.get(`http://127.0.0.1:8000/api/records/${item.id}/`)
-  detections.value = normalizeDetections(res.data.detections)
+  console.group(`📄 加载历史记录详情 - ID: ${item.id}`)
+  console.log('【列表项 item】', item)
 
-  const imgUrl = `http://127.0.0.1:8000${res.data.image}`
-  const img = new Image()
-  img.src = imgUrl
-  img.onload = () => {
-    imageObj.value = img
-    imageUrl.value = imgUrl
-    resetTransform() // 重置缩放位置
-    drawCanvas()     // 绘制到画布
+  try {
+    const res = await axios.get(
+      `http://127.0.0.1:8000/api/records/${item.id}/`
+    )
+
+    // 1️⃣ 打印后端返回的原始数据（最关键）
+    console.log('【后端返回 record_detail 原始数据】', res.data)
+
+    // 2️⃣ 打印关键字段（防止字段名不一致）
+    console.table({
+      id: res.data.id,
+      created_at: res.data.created_at,
+      image: res.data.image,
+      image_width: res.data.image_width,
+      image_height: res.data.image_height,
+      detections_length: res.data.detections?.length
+    })
+
+    // 3️⃣ 单独打印 detections 详情
+    console.log('【检测结果 detections】', res.data.detections)
+
+    // === 原有逻辑 ===
+    detections.value = normalizeDetections(res.data.detections)
+
+    const imgUrl = `http://127.0.0.1:8000${res.data.image}`
+    const img = new Image()
+    img.src = imgUrl
+
+    img.onload = () => {
+      imageObj.value = img
+      imageUrl.value = imgUrl
+      resetTransform()
+      drawCanvas()
+
+      // 4️⃣ 图片加载完成后的状态确认
+      console.log('【图片加载完成】', {
+        imgUrl,
+        naturalWidth: img.naturalWidth,
+        naturalHeight: img.naturalHeight,
+      })
+    }
+
+  } catch (err) {
+    console.error('❌ 加载历史记录详情失败', err)
+  } finally {
+    console.groupEnd()
   }
 }
+
+
+// 删除单条历史记录
+const deleteHistory = async (item: HistoryItem) => {
+  const ok = window.confirm('确认删除该历史记录吗？')
+  if (!ok) return
+
+  await axios.delete(`http://127.0.0.1:8000/api/records/${item.id}/delete/`)
+
+  // 1. 前端移除该条记录
+  historyList.value = historyList.value.filter(h => h.id !== item.id)
+
+  // 2. 如果当前画布正在显示的是被删记录 → 清空画布
+  if (imageUrl.value && imageUrl.value.includes(item.image)) {
+    clearCanvasState()
+  }
+}
+
+const clearCanvasState = () => {
+  detections.value = []
+  imageUrl.value = null
+  imageObj.value = null
+  activeIndex.value = null
+  resetTransform()
+
+  if (canvasRef.value) {
+    const ctx = canvasRef.value.getContext('2d')
+    ctx?.clearRect(0, 0, canvasRef.value.width, canvasRef.value.height)
+  }
+}
+
 
 /* ========================================================================
    交互逻辑 (Interaction: Zoom & Drag)
@@ -362,15 +433,31 @@ onMounted(() => {
         <div class="card history-card">
           <div class="card-header">历史记录</div>
           <div class="card-body">
-            <div v-for="(item, idx) in historyList" :key="idx" class="item" @click="loadHistory(item)">
+            <div
+              v-for="item in historyList"
+              :key="item.id"
+              class="item"
+              @click="loadHistory(item)"
+            >
               <div class="item-info">
-                <span class="time">{{ item.time }}</span>
+                <span class="time">{{ item.created_at }}</span>
                 <span>{{ item.detections_count }} 个目标</span>
               </div>
+
+              <!-- 删除按钮：关键点在 @click.stop -->
+              <button
+                class="btn-delete"
+                @click.stop="deleteHistory(item)"
+                title="删除该记录"
+              >
+                ✖
+              </button>
             </div>
+
             <div v-if="!historyList.length" class="empty">无记录</div>
           </div>
         </div>
+
 
         <div class="card result-card">
           <div class="card-header">
