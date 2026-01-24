@@ -22,8 +22,8 @@ export interface Detection {
 export interface HistoryItem {
   id: number
   image: string
-  created_at: string
-  detections_count: number
+  time: string
+  detections: any[]
 }
 
 export interface RecordDetail extends HistoryItem {

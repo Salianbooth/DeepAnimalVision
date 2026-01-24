@@ -499,8 +499,8 @@ onMounted(async () => {
               @click="loadHistory(item)"
             >
               <div class="item-info">
-                <span class="time">{{ item.created_at }}</span>
-                <span>{{ item.detections_count }} 个目标</span>
+                <span class="time">{{ item.time }}</span>
+                <span> {{ item.detections }} 个目标</span>
               </div>
 
               <!-- 删除按钮：关键点在 @click.stop -->
