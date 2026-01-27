@@ -120,7 +120,6 @@ const loadHistory = async (item: { id: number }) => {
 
   try {
     const record = await historyStore.fetchRecordDetail(item.id)
-
     console.log('【Pinia current record】', record)
 
     // detections
@@ -129,6 +128,7 @@ const loadHistory = async (item: { id: number }) => {
     // image
     const imgUrl = `http://127.0.0.1:8000${record.image}`
     const img = new Image()
+    img.crossOrigin = 'anonymous'   // ✅ crossOrigin 必须在 src 之前
     img.src = imgUrl
 
     img.onload = () => {
@@ -138,12 +138,17 @@ const loadHistory = async (item: { id: number }) => {
       drawCanvas()
     }
 
+    img.onerror = (err) => {
+      console.error('❌ 图片加载失败', err)
+    }
+
   } catch (err) {
     console.error('❌ 加载历史记录失败', err)
   } finally {
     console.groupEnd()
   }
 }
+
 
 
 
