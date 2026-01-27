@@ -21,8 +21,9 @@ class Detection(models.Model):
         on_delete=models.CASCADE
     )
 
-    # class_id = models.IntegerField()
-    label = models.CharField(max_length=50)
+    class_id = models.IntegerField()          # ✅ 模型原始输出
+    label = models.CharField(max_length=50)   # ✅ 语义标签（英文）
+
     confidence = models.FloatField()
 
     x1 = models.FloatField()
@@ -31,4 +32,5 @@ class Detection(models.Model):
     y2 = models.FloatField()
 
     def __str__(self):
-        return f"{self.label} ({self.confidence:.2f})"
+        return f"[{self.class_id}] {self.label} ({self.confidence:.2f})"
+

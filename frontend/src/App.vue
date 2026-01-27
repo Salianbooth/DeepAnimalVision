@@ -11,26 +11,21 @@ import { ref, onMounted, computed, reactive } from 'vue'
 import axios from 'axios'
 import { storeToRefs } from 'pinia'
 import { useHistoryStore } from '@/store/history'
+import type { Detection } from '@/store/history'
+import { CLASS_TEXT_MAP, CLASS_COLOR_MAP } from '@/constants/classMap'
 
 /* ========================================================================
    核心状态 (Reactive State)
    ======================================================================== */
 const canvasRef = ref<HTMLCanvasElement | null>(null) // Canvas 元素引用
-const detections = ref<any[]>([])                    // 当前图片的检测结果列表
+const detections = ref<Detection[]>([])                    // 当前图片的检测结果列表
 const loading = ref(false)                           // 识别请求状态
 const imageUrl = ref<string | null>(null)            // 图片的 Blob 或 URL
 const activeIndex = ref<number | null>(null)         // 侧边栏选中目标的索引
 const imageObj = ref<HTMLImageElement | null>(null)  // 缓存的 HTML Image 对象，用于重绘
 const detections_count = computed(() => detections.value.length)
 
-/* ===== 历史记录相关 ===== */
-// type HistoryItem = {
-//   id: number
-//   image: string
-//   created_at: string
-//   detections_count: number
-// }
-// const historyList = ref<HistoryItem[]>([])
+
 /* ===== 历史记录（Pinia）===== */
 const historyStore = useHistoryStore()
 const { historyList, current, loading: historyLoading } = storeToRefs(historyStore)
@@ -48,23 +43,19 @@ const transform = reactive({
 /* ========================================================================
    映射配置 (Mapping & Configuration)
    ======================================================================== */
-const classMap: Record<number, string> = {
-  0: '人',
-  5: '公交车',
-  11: '停车标志'
-}
+// const classMap: Record<number, string> = {
+//   0: '人',
+//   5: '公交车',
+//   11: '停车标志'
+// }
 
-const labelMap: Record<string, number> = {
-  person: 0,
-  bus: 5,
-  'stop sign': 11
-}
 
-const colorMap: Record<number, string> = {
-  0: '#F43F5E', // 红色系
-  5: '#3B82F6', // 蓝色系
-  11: '#10B981' // 绿色系
-}
+
+// const colorMap: Record<number, string> = {
+//   0: '#F43F5E', // 红色系
+//   5: '#3B82F6', // 蓝色系
+//   11: '#10B981' // 绿色系
+// }
 
 /* ========================================================================
    数据处理逻辑 (Data Processing)
@@ -76,27 +67,17 @@ const colorMap: Record<number, string> = {
  */
 const normalizeDetections = (raw: any[]) => {
   return raw.map(det => {
-    // ===== 来自 records 接口（label + bbox）=====
-    if (det.label && Array.isArray(det.bbox)) {
-      const classId = labelMap[det.label] ?? -1
+    const classId = det.class_id ?? -1
 
-      return {
-        class_id: classId,
-        label: classMap[classId] || det.label || '未知',
-        confidence: det.confidence,
-        bbox: det.bbox
-      }
-    }
-
-    // ===== 来自 detect 接口（class_id + bbox）=====
     return {
-      class_id: det.class_id,
-      label: classMap[det.class_id] || '未知',
+      class_id: classId,
+      label: CLASS_TEXT_MAP[classId] || '未知',
       confidence: det.confidence,
       bbox: det.bbox
     }
   })
 }
+
 
 /**
  * 分类统计 (Computed)
@@ -109,11 +90,15 @@ const stats = computed(() => {
       map[det.class_id] = (map[det.class_id] || 0) + 1
     }
   })
-  return Object.keys(map).map(id => ({
-    label: classMap[Number(id)] || `类别 ${id}`,
-    count: map[Number(id)],
-    color: colorMap[Number(id)] || '#8B5CF6'
-  }))
+  return Object.keys(map).map(id => {
+  const cid = Number(id)
+  return {
+    label: CLASS_TEXT_MAP[cid] || `类别 ${cid}`,
+    count: map[cid],
+    color: CLASS_COLOR_MAP[cid] || '#8B5CF6'
+  }
+})
+
 })
 
 /* ========================================================================
@@ -121,70 +106,15 @@ const stats = computed(() => {
    ======================================================================== */
 
 // 获取所有检测历史
-// const loadRecords = async () => {
-//   const res = await axios.get('http://127.0.0.1:8000/api/records/')
-//   historyList.value = res.data.records
-// }
+
 
 const loadRecords = async () => {
   await historyStore.fetchHistoryList()
 }
 
 
-// 加载某条具体的历史详情
-// const loadHistory = async (item: HistoryItem) => {
-//   console.group(`📄 加载历史记录详情 - ID: ${item.id}`)
-//   console.log('【列表项 item】', item)
 
-//   try {
-//     const res = await axios.get(
-//       `http://127.0.0.1:8000/api/records/${item.id}/`
-//     )
-
-//     // 1️⃣ 打印后端返回的原始数据（最关键）
-//     console.log('【后端返回 record_detail 原始数据】', res.data)
-
-//     // 2️⃣ 打印关键字段（防止字段名不一致）
-//     console.table({
-//       id: res.data.id,
-//       created_at: res.data.created_at,
-//       image: res.data.image,
-//       image_width: res.data.image_width,
-//       image_height: res.data.image_height,
-//       detections_length: res.data.detections?.length
-//     })
-
-//     // 3️⃣ 单独打印 detections 详情
-//     console.log('【检测结果 detections】', res.data.detections)
-
-//     // === 原有逻辑 ===
-//     detections.value = normalizeDetections(res.data.detections)
-
-//     const imgUrl = `http://127.0.0.1:8000${res.data.image}`
-//     const img = new Image()
-//     img.src = imgUrl
-
-//     img.onload = () => {
-//       imageObj.value = img
-//       imageUrl.value = imgUrl
-//       resetTransform()
-//       drawCanvas()
-
-//       // 4️⃣ 图片加载完成后的状态确认
-//       console.log('【图片加载完成】', {
-//         imgUrl,
-//         naturalWidth: img.naturalWidth,
-//         naturalHeight: img.naturalHeight,
-//       })
-//     }
-
-//   } catch (err) {
-//     console.error('❌ 加载历史记录详情失败', err)
-//   } finally {
-//     console.groupEnd()
-//   }
-// }
-
+//加载详细历史记录
 const loadHistory = async (item: { id: number }) => {
   console.group(`📄 加载历史记录详情 - ID: ${item.id}`)
 
@@ -242,6 +172,15 @@ const deleteHistory = async (item: { id: number }) => {
   if (current.value?.id === item.id) {
     clearCanvasState()
   }
+}
+const clearAllHistory = async () => {
+  const ok = window.confirm('确认清空所有历史记录吗？该操作不可恢复')
+  if (!ok) return
+
+  await historyStore.clearAll()
+
+  // 如果当前画布有内容，顺便清空
+  clearCanvasState()
 }
 
 
@@ -344,7 +283,7 @@ const drawCanvas = () => {
 
   const color = i === activeIndex.value
     ? '#F59E0B'
-    : (colorMap[det.class_id] || '#8B5CF6')
+    : (CLASS_COLOR_MAP[det.class_id] || '#8B5CF6')
 
   // ===== 1. 画检测框 =====
   ctx.strokeStyle = color
@@ -381,6 +320,42 @@ const drawCanvas = () => {
 
 
   ctx.restore()
+}
+/**
+ * 保存当前 Canvas 渲染结果为图片
+ */
+const saveAsImage = () => {
+  if (!canvasRef.value) return
+
+  const canvas = canvasRef.value
+  const dataURL = canvas.toDataURL('image/png')
+
+  const a = document.createElement('a')
+  a.href = dataURL
+  a.download = `DeepAnimalVision_${Date.now()}.png`
+  a.click()
+}
+/**
+ * 导出当前检测结果为 JSON 文件
+ */
+const exportResult = () => {
+  if (!detections.value.length) return
+
+  const data = {
+    image: imageUrl.value,
+    detections: detections.value
+  }
+
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: 'application/json'
+  })
+
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `DeepAnimalVision_${Date.now()}.json`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 /* ========================================================================
@@ -490,7 +465,17 @@ onMounted(async () => {
       <!-- 右侧侧边栏：卡片撑满显示右边框 -->
       <aside class="sidebar-section">
         <div class="card history-card">
-          <div class="card-header">历史记录</div>
+          <div class="card-header"> <span>历史记录</span>
+
+            <button
+              class="btn-clear-all"
+              v-if="historyList.length > 0"
+              @click="clearAllHistory"
+              title="清空所有历史记录"
+            >
+              清空
+            </button></div>
+
           <div class="card-body">
             <div
               v-for="item in historyList"
@@ -500,7 +485,7 @@ onMounted(async () => {
             >
               <div class="item-info">
                 <span class="time">{{ item.time }}</span>
-                <span> {{ item.detections }} 个目标</span>
+                <span> {{ item.count }} 个目标</span>
               </div>
 
               <!-- 删除按钮：关键点在 @click.stop -->
@@ -538,8 +523,8 @@ onMounted(async () => {
             <div class="det-list">
               <!-- 唯一修正：把错误的 <<i ...></</i> 改为标准的 <i ...></i> -->
               <div v-for="(det, i) in detections" :key="i" class="det-item" :class="{ active: activeIndex === i }" @click="activeIndex = i; drawCanvas()">
-                <i :style="{ background: colorMap[det.class_id] || '#8b5cf6' }"></i>
-                <span class="name">{{ classMap[det.class_id] || '未知' }}</span>
+                <i :style="{ background: CLASS_COLOR_MAP[det.class_id] || '#8b5cf6' }"></i>
+                <span class="name">{{ CLASS_TEXT_MAP[det.class_id] || '未知' }}</span>
                 <span class="conf">{{ (det.confidence * 100).toFixed(0) }}%</span>
               </div>
             </div>

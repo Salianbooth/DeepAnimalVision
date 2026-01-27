@@ -11,6 +11,7 @@ import {
  * 与后端 record_detail 返回结构保持一致
  */
 export interface Detection {
+  class_id: number
   label: string
   confidence: number
   bbox: number[]
@@ -23,7 +24,7 @@ export interface HistoryItem {
   id: number
   image: string
   time: string
-  detections: any[]
+  count?: number        // 列表接口返回的
 }
 
 export interface RecordDetail extends HistoryItem {
