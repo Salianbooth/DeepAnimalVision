@@ -3,8 +3,14 @@ from django.db import models
 
 # Create your models here.
 from django.db import models
+from django.conf import settings
 
 class Record(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,  # 指向自定义 User
+        related_name='records',  # user.records.all() 可以拿到这个用户的所有记录
+        on_delete=models.CASCADE
+    )
     image = models.ImageField(upload_to='records/')
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -12,7 +18,7 @@ class Record(models.Model):
     image_height = models.IntegerField()
 
     def __str__(self):
-        return f"Record {self.id} @ {self.created_at}"
+        return f"Record {self.id} by {self.user.username} @ {self.created_at}"
 
 class Detection(models.Model):
     record = models.ForeignKey(
