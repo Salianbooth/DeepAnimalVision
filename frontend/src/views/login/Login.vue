@@ -1,19 +1,19 @@
 <template>
   <div class="login-container">
     <div class="illustration">
-      <img src="../../assets/images/illustration.png" alt="Illustration" style="border-radius: 50px;" />
+      <img src="../../assets/images/illustration.png" alt="Illustration" />
     </div>
 
     <div class="login-box">
       <h2>动物图像识别系统登录</h2>
 
-      <form @submit.prevent="handleLogin" class="form">
+      <form class="form" @submit.prevent="handleLogin">
         <div class="form-group">
           <label for="username">用户名</label>
           <input
             id="username"
+            v-model.trim="username"
             type="text"
-            v-model="username"
             placeholder="请输入用户名"
           />
         </div>
@@ -22,36 +22,66 @@
           <label for="password">密码</label>
           <input
             id="password"
-            type="password"
             v-model="password"
+            type="password"
             placeholder="请输入密码"
           />
         </div>
 
-        <button type="submit" class="login-button">登录</button>
+        <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
+
+        <button type="submit" class="login-button" :disabled="loading">
+          {{ loading ? '登录中...' : '登录' }}
+        </button>
       </form>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 
-const router = useRouter();
+import request from '@/api/request'
 
-const username = ref("");
-const password = ref("");
+const router = useRouter()
 
-// 最简单的本地登录逻辑（写死）
-const handleLogin = () => {
-  if (username.value === "admin" && password.value === "123456") {
-    alert("登录成功");
-    router.push("/user"); // 跳转到 Home.vue
-  } else {
-    alert("用户名或密码错误");
+const username = ref('')
+const password = ref('')
+const loading = ref(false)
+const errorMessage = ref('')
+
+const handleLogin = async () => {
+  errorMessage.value = ''
+
+  if (!username.value || !password.value) {
+    errorMessage.value = '用户名和密码不能为空'
+    return
   }
-};
+
+  loading.value = true
+
+  try {
+    const response = await request.post('/login/', {
+      username: username.value,
+      password: password.value,
+    })
+
+    const user = response.data?.user
+    if (!user) {
+      errorMessage.value = '登录响应无效'
+      return
+    }
+
+    localStorage.setItem('user', JSON.stringify(user))
+    router.push(user.role === 'admin' ? '/admin' : '/user')
+  } catch (error: any) {
+    errorMessage.value =
+      error?.response?.data?.error || '登录失败，请检查用户名和密码'
+  } finally {
+    loading.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -74,6 +104,7 @@ const handleLogin = () => {
 .illustration img {
   max-width: 80%;
   height: auto;
+  border-radius: 50px;
 }
 
 .login-box {
@@ -116,6 +147,12 @@ input {
   font-size: 14px;
 }
 
+.error-message {
+  margin: 0 0 12px;
+  color: #d14343;
+  text-align: left;
+}
+
 .login-button {
   width: 100%;
   padding: 10px;
@@ -125,5 +162,10 @@ input {
   color: white;
   font-size: 16px;
   cursor: pointer;
+}
+
+.login-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 </style>

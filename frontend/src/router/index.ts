@@ -18,7 +18,7 @@ router.beforeEach((to, from, next) => {
     }
 
     // 需要管理员，但不是管理员
-    if (to.meta.requiresAdmin && user?.role !== 'ADMIN') {
+    if (to.meta.requiresAdmin && user?.role !== 'admin') {
         next('/user')
         return
     }

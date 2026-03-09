@@ -8,7 +8,7 @@
  * 4. 交互：实现类似 Photoshop 的拖拽与滚轮缩放逻辑。
  */
 import { ref, onMounted, computed, reactive } from 'vue'
-import axios from 'axios'
+import request, { API_ORIGIN } from '@/api/request'
 import { storeToRefs } from 'pinia'
 import { useHistoryStore } from '@/store/history'
 import type { Detection } from '@/store/history'
@@ -126,7 +126,7 @@ const loadHistory = async (item: { id: number }) => {
     detections.value = normalizeDetections(record.detections || [])
 
     // image
-    const imgUrl = `http://127.0.0.1:8000${record.image}`
+    const imgUrl = `${API_ORIGIN}${record.image}`
     const img = new Image()
     img.crossOrigin = 'anonymous'   // ✅ crossOrigin 必须在 src 之前
     img.src = imgUrl
@@ -386,7 +386,7 @@ const onFileChange = async (e: Event) => {
 
     loading.value = true
     try {
-      const res = await axios.post('http://127.0.0.1:8000/api/detect/', formData)
+      const res = await request.post('/detect/', formData)
       detections.value = normalizeDetections(res.data.detections)
       drawCanvas()
       await loadRecords() // 刷新历史列表
