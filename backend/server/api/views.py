@@ -178,6 +178,56 @@ def admin_user_list(request):
 
 
 @csrf_exempt
+def admin_create_user(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST only"}, status=405)
+
+    admin_user = get_admin_user(request)
+    if admin_user is None:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+
+    try:
+        data = json.loads(request.body.decode())
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    role = data.get("role") or "user"
+
+    if not username or not password:
+        return JsonResponse({"error": "Username and password are required"}, status=400)
+
+    if role not in {"user", "admin"}:
+        return JsonResponse({"error": "Invalid role"}, status=400)
+
+    if User.objects.filter(username=username).exists():
+        return JsonResponse({"error": "Username already exists"}, status=400)
+
+    user = User.objects.create_user(
+        username=username,
+        password=password,
+        role=role,
+        is_staff=role == "admin",
+        is_superuser=role == "admin",
+    )
+
+    return JsonResponse(
+        {
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "role": user.role,
+                "is_active": user.is_active,
+                "joined_at": user.date_joined.strftime("%Y-%m-%d %H:%M:%S"),
+                "record_count": 0,
+            }
+        },
+        status=201,
+    )
+
+
+@csrf_exempt
 def admin_update_user_role(request, user_id):
     if request.method not in {"PATCH", "POST"}:
         return JsonResponse({"error": "PATCH or POST only"}, status=405)
@@ -220,6 +270,56 @@ def admin_update_user_role(request, user_id):
             }
         }
     )
+
+
+@csrf_exempt
+def admin_delete_user(request, user_id):
+    if request.method != "DELETE":
+        return JsonResponse({"error": "DELETE only"}, status=405)
+
+    admin_user = get_admin_user(request)
+    if admin_user is None:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+
+    if user.id == admin_user.id:
+        return JsonResponse({"error": "You cannot delete your own account"}, status=400)
+
+    user.delete()
+    return JsonResponse({"success": True})
+
+
+@csrf_exempt
+def admin_reset_user_password(request, user_id):
+    if request.method not in {"PATCH", "POST"}:
+        return JsonResponse({"error": "PATCH or POST only"}, status=405)
+
+    admin_user = get_admin_user(request)
+    if admin_user is None:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+
+    try:
+        data = json.loads(request.body.decode())
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    password = data.get("password") or ""
+    if not password:
+        return JsonResponse({"error": "Password is required"}, status=400)
+
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+
+    user.set_password(password)
+    user.save(update_fields=["password"])
+
+    return JsonResponse({"success": True})
 
 
 @csrf_exempt

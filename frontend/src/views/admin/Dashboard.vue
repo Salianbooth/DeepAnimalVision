@@ -166,6 +166,82 @@
 
           <p v-if="usersError" class="error-banner">{{ usersError }}</p>
 
+          <section class="create-user-panel panel full-width">
+            <div class="panel-header users-header">
+              <div>
+                <p class="panel-eyebrow">Create User</p>
+                <h2>创建用户</h2>
+              </div>
+            </div>
+
+            <form class="create-form" @submit.prevent="handleCreateUser">
+              <label class="field">
+                <span>用户名</span>
+                <input v-model.trim="createForm.username" type="text" placeholder="输入用户名" />
+              </label>
+
+              <label class="field">
+                <span>密码</span>
+                <input v-model="createForm.password" type="password" placeholder="输入初始密码" />
+              </label>
+
+              <label class="field">
+                <span>角色</span>
+                <select v-model="createForm.role">
+                  <option value="user">普通用户</option>
+                  <option value="admin">管理员</option>
+                </select>
+              </label>
+
+              <button type="submit" class="create-button" :disabled="creatingUser">
+                {{ creatingUser ? '创建中...' : '创建用户' }}
+              </button>
+            </form>
+          </section>
+
+          <section v-if="passwordResetTarget" class="create-user-panel panel full-width">
+            <div class="panel-header users-header">
+              <div>
+                <p class="panel-eyebrow">Reset Password</p>
+                <h2>重置密码</h2>
+              </div>
+              <button type="button" class="ghost-button" @click="cancelPasswordReset">
+                取消
+              </button>
+            </div>
+
+            <form class="create-form" @submit.prevent="handleResetPassword">
+              <label class="field">
+                <span>目标用户</span>
+                <input :value="passwordResetTarget.username" type="text" disabled />
+              </label>
+
+              <label class="field">
+                <span>新密码</span>
+                <input
+                  v-model="passwordResetValue"
+                  type="password"
+                  placeholder="输入新的登录密码"
+                />
+              </label>
+
+              <div class="field">
+                <span>说明</span>
+                <p class="field-note">修改后该用户需使用新密码重新登录。</p>
+              </div>
+
+              <button
+                type="submit"
+                class="create-button"
+                :disabled="resettingPasswordUserId === passwordResetTarget.id"
+              >
+                {{
+                  resettingPasswordUserId === passwordResetTarget.id ? '重置中...' : '确认重置密码'
+                }}
+              </button>
+            </form>
+          </section>
+
           <section class="filter-bar">
             <label class="search-box">
               <span>搜索</span>
@@ -235,6 +311,22 @@
                   >
                     设为管理员
                   </button>
+                  <button
+                    type="button"
+                    class="role-action"
+                    :disabled="resettingPasswordUserId === user.id"
+                    @click="startPasswordReset(user)"
+                  >
+                    重置密码
+                  </button>
+                  <button
+                    type="button"
+                    class="role-action danger"
+                    :disabled="deletingUserId === user.id || user.id === currentUserId"
+                    @click="deleteUser(user.id, user.username)"
+                  >
+                    {{ deletingUserId === user.id ? '删除中...' : '删除用户' }}
+                  </button>
                 </div>
               </div>
             </div>
@@ -285,7 +377,18 @@ const roleFilters: Array<{ value: RoleFilter; label: string }> = [
 
 const router = useRouter()
 const adminStore = useAdminStore()
-const { overview, users, loading, usersLoading, updatingUserId, error, usersError } =
+const {
+  overview,
+  users,
+  loading,
+  usersLoading,
+  updatingUserId,
+  deletingUserId,
+  creatingUser,
+  resettingPasswordUserId,
+  error,
+  usersError,
+} =
   storeToRefs(adminStore)
 
 const currentUserName = ref('')
@@ -293,6 +396,13 @@ const currentUserId = ref<number | null>(null)
 const activeSection = ref<AdminSection>('overview')
 const searchKeyword = ref('')
 const roleFilter = ref<RoleFilter>('all')
+const createForm = ref({
+  username: '',
+  password: '',
+  role: 'user' as AdminManagedUser['role'],
+})
+const passwordResetTarget = ref<AdminManagedUser | null>(null)
+const passwordResetValue = ref('')
 
 const summary = computed(() => overview.value.summary)
 const recentUsers = computed(() => overview.value.recent_users)
@@ -335,6 +445,65 @@ const changeRole = async (userId: number, role: AdminManagedUser['role']) => {
   }
 }
 
+const handleCreateUser = async () => {
+  if (!createForm.value.username || !createForm.value.password) {
+    adminStore.usersError = '请填写用户名和密码'
+    return
+  }
+
+  try {
+    await adminStore.createUser({
+      username: createForm.value.username,
+      password: createForm.value.password,
+      role: createForm.value.role,
+    })
+    createForm.value = {
+      username: '',
+      password: '',
+      role: 'user',
+    }
+    await adminStore.fetchOverview()
+  } catch {
+    // errors are surfaced through the store
+  }
+}
+
+const startPasswordReset = (user: AdminManagedUser) => {
+  passwordResetTarget.value = user
+  passwordResetValue.value = ''
+}
+
+const cancelPasswordReset = () => {
+  passwordResetTarget.value = null
+  passwordResetValue.value = ''
+}
+
+const handleResetPassword = async () => {
+  if (!passwordResetTarget.value) return
+  if (!passwordResetValue.value) {
+    adminStore.usersError = '请输入新密码'
+    return
+  }
+
+  try {
+    await adminStore.resetUserPassword(passwordResetTarget.value.id, passwordResetValue.value)
+    cancelPasswordReset()
+  } catch {
+    // errors are surfaced through the store
+  }
+}
+
+const deleteUser = async (userId: number, username: string) => {
+  if (!window.confirm(`确认删除用户 ${username} 吗？该操作不可恢复。`)) return
+
+  try {
+    await adminStore.removeUser(userId)
+    await adminStore.fetchOverview()
+  } catch {
+    // errors are surfaced through the store
+  }
+}
+
 const handleLogout = () => {
   localStorage.removeItem('user')
   router.push('/login')
@@ -354,7 +523,7 @@ onMounted(async () => {
 .admin-shell {
   --primary: #0f766e;
   --border: rgba(148, 163, 184, 0.22);
-  min-height: 100vh;
+  min-height: 100dvh;
   background:
     radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 32%),
     radial-gradient(circle at right 20%, rgba(191, 219, 254, 0.42), transparent 26%),
@@ -366,6 +535,7 @@ onMounted(async () => {
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 18px;
   padding: 20px;
+  align-items: start;
 }
 
 .sidebar {
@@ -461,6 +631,7 @@ onMounted(async () => {
   display: grid;
   gap: 18px;
   min-width: 0;
+  align-content: start;
 }
 
 .hero {
@@ -687,6 +858,81 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 
+.create-user-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.create-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr) 180px 140px;
+  gap: 12px;
+  align-items: end;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.field input,
+.field select {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 12px 14px;
+  color: #0f172a;
+}
+
+.field input:disabled {
+  color: #64748b;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.field input:focus,
+.field select:focus {
+  outline: none;
+  border-color: rgba(15, 118, 110, 0.4);
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
+}
+
+.create-button {
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 14px;
+  background: linear-gradient(135deg, #0f766e 0%, #38bdf8 100%);
+  color: #fff;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.create-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.ghost-button {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #475569;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.field-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 .search-box {
   display: grid;
   gap: 6px;
@@ -790,6 +1036,11 @@ onMounted(async () => {
   color: #1d4ed8;
 }
 
+.role-action.danger {
+  border-color: rgba(220, 38, 38, 0.16);
+  color: #dc2626;
+}
+
 .role-action.active {
   background: #e2e8f0;
   color: #0f172a;
@@ -819,6 +1070,10 @@ onMounted(async () => {
   .users-row {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .create-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 980px) {
@@ -832,6 +1087,21 @@ onMounted(async () => {
 
   .sidebar-nav {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-height: 860px) {
+  .admin-layout {
+    padding: 14px;
+    gap: 14px;
+  }
+
+  .hero {
+    padding: 22px 20px;
+  }
+
+  .sidebar {
+    position: static;
   }
 }
 

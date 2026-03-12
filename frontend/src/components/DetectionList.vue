@@ -66,47 +66,50 @@ const getDetectionColor = (classId: number) => CLASS_COLOR_MAP[classId] || '#8B5
   min-height: 0;
   flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.05);
+  backdrop-filter: blur(12px);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 14px;
+  padding: 18px 20px 16px;
   border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
+  color: #0f172a;
 }
 
 .badge {
-  border-radius: 8px;
-  background: var(--primary);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #0f766e 0%, #38bdf8 100%);
   color: #fff;
-  padding: 1px 6px;
-  font-size: 9px;
+  padding: 5px 9px;
+  font-size: 10px;
 }
 
 .card-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 10px;
+  padding: 14px;
   font-size: 12px;
 }
 
 .stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
 .stat-pill {
-  border-radius: 18px;
-  padding: 3px 8px;
-  font-size: 10px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -120,22 +123,31 @@ const getDetectionColor = (classId: number) => CLASS_COLOR_MAP[classId] || '#8B5
   display: flex;
   align-items: center;
   border: 1px solid transparent;
-  border-radius: 6px;
-  background: #f8fafc;
-  padding: 8px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 12px 14px;
   cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .det-item.active {
   border-color: var(--primary);
-  background: #eef2ff;
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.12), rgba(56, 189, 248, 0.1));
+  box-shadow: 0 14px 26px rgba(15, 118, 110, 0.08);
+}
+
+.det-item:hover {
+  transform: translateY(-1px);
 }
 
 .det-item i {
-  width: 4px;
-  height: 12px;
-  margin-right: 6px;
-  border-radius: 2px;
+  width: 6px;
+  height: 18px;
+  margin-right: 10px;
+  border-radius: 999px;
 }
 
 .name {

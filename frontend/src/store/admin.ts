@@ -1,9 +1,13 @@
 import { defineStore } from 'pinia'
 
 import {
+  createAdminUser,
+  deleteAdminUser,
   getAdminOverview,
   getAdminUsers,
+  resetAdminUserPassword,
   updateAdminUserRole,
+  type AdminCreateUserPayload,
   type AdminManagedUser,
   type AdminOverview,
 } from '@/api/admin'
@@ -27,6 +31,9 @@ export const useAdminStore = defineStore('admin', {
     loading: false,
     usersLoading: false,
     updatingUserId: null as number | null,
+    deletingUserId: null as number | null,
+    creatingUser: false,
+    resettingPasswordUserId: null as number | null,
     error: '',
     usersError: '',
   }),
@@ -73,6 +80,50 @@ export const useAdminStore = defineStore('admin', {
         throw error
       } finally {
         this.updatingUserId = null
+      }
+    },
+
+    async createUser(payload: AdminCreateUserPayload) {
+      this.creatingUser = true
+      this.usersError = ''
+
+      try {
+        const response = await createAdminUser(payload)
+        this.users = [response.data.user, ...this.users]
+      } catch (error: any) {
+        this.usersError = error?.response?.data?.error || '创建用户失败'
+        throw error
+      } finally {
+        this.creatingUser = false
+      }
+    },
+
+    async removeUser(userId: number) {
+      this.deletingUserId = userId
+      this.usersError = ''
+
+      try {
+        await deleteAdminUser(userId)
+        this.users = this.users.filter(user => user.id !== userId)
+      } catch (error: any) {
+        this.usersError = error?.response?.data?.error || '删除用户失败'
+        throw error
+      } finally {
+        this.deletingUserId = null
+      }
+    },
+
+    async resetUserPassword(userId: number, password: string) {
+      this.resettingPasswordUserId = userId
+      this.usersError = ''
+
+      try {
+        await resetAdminUserPassword(userId, { password })
+      } catch (error: any) {
+        this.usersError = error?.response?.data?.error || '重置密码失败'
+        throw error
+      } finally {
+        this.resettingPasswordUserId = null
       }
     },
   },

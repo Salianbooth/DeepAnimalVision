@@ -88,8 +88,9 @@ onMounted(() => {
 .viewport-section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 14px;
   min-height: 0;
+  flex: 1;
 }
 
 .canvas-container {
@@ -97,10 +98,13 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.06), transparent 22%),
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   cursor: grab;
+  min-height: clamp(320px, 50vh, 520px);
 }
 
 .canvas-container.dragging {
@@ -109,31 +113,34 @@ onMounted(() => {
 
 .floating-toolbar {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 14px;
+  right: 14px;
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgb(255 255 255 / 90%);
-  backdrop-filter: blur(8px);
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 16px;
+  background: rgb(255 255 255 / 88%);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.08);
 }
 
 .floating-toolbar button {
-  border: none;
-  border-radius: 6px;
+  border: 1px solid transparent;
+  border-radius: 12px;
   background: transparent;
-  padding: 4px 8px;
+  padding: 8px 10px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  color: #0f172a;
 }
 
 .floating-toolbar button:hover {
-  background: #f1f5f9;
+  border-color: rgba(148, 163, 184, 0.18);
+  background: #f8fafc;
 }
 
 .btn-save {
@@ -160,14 +167,14 @@ canvas {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgb(255 255 255 / 82%);
+  background: rgb(255 255 255 / 78%);
 }
 
 .loading-spinner {
-  width: 28px;
-  height: 28px;
-  margin-bottom: 10px;
-  border: 3px solid #e2e8f0;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 12px;
+  border: 3px solid #dbe4ea;
   border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -195,14 +202,15 @@ canvas {
 }
 
 .placeholder-content h3 {
-  margin-bottom: 4px;
-  color: #334155;
+  margin-bottom: 6px;
+  color: #0f172a;
+  font-size: 24px;
 }
 
 .icon {
   display: block;
-  margin-bottom: 8px;
-  font-size: 28px;
+  margin-bottom: 12px;
+  font-size: 32px;
   font-weight: 700;
   opacity: 0.5;
   letter-spacing: 0.08em;
@@ -210,19 +218,20 @@ canvas {
 
 .action-bar {
   display: flex;
-  gap: 6px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
 .btn-primary {
   flex: 1;
-  border-radius: 8px;
-  background: var(--primary);
+  border-radius: 16px;
+  background: linear-gradient(135deg, #0f766e 0%, #38bdf8 100%);
   color: #fff;
-  padding: 10px;
+  padding: 14px 18px;
   text-align: center;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 18px 28px rgba(15, 118, 110, 0.2);
 }
 
 .btn-primary.is-loading {
@@ -234,11 +243,22 @@ canvas {
 }
 
 .btn-secondary {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.88);
   padding: 0 18px;
   font-weight: 600;
   cursor: pointer;
+  color: #334155;
+}
+
+@media (max-width: 720px) {
+  .canvas-container {
+    min-height: clamp(280px, 42vh, 400px);
+  }
+
+  .action-bar {
+    flex-direction: column;
+  }
 }
 </style>

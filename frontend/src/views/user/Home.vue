@@ -7,6 +7,7 @@ import AppHeader from '@/components/Header.vue'
 import CanvasViewer from '@/components/CanvasViewer.vue'
 import DetectionList from '@/components/DetectionList.vue'
 import HistoryPanel from '@/components/HistoryPanel.vue'
+import StatCard from '@/components/StatCard.vue'
 import { CLASS_COLOR_MAP, CLASS_TEXT_MAP } from '@/constants/classMap'
 import { useHistoryStore } from '@/store/history'
 import type { Detection, HistoryItem } from '@/store/history'
@@ -52,6 +53,13 @@ const transform = reactive({
 })
 
 const detectionsCount = computed(() => detections.value.length)
+const historyCount = computed(() => historyList.value.length)
+const canvasZoomText = computed(() => `${Math.round(transform.scale * 100)}%`)
+const activeDetectionLabel = computed(() => {
+  if (activeIndex.value === null) return '未选中目标'
+  return detections.value[activeIndex.value]?.label || '未选中目标'
+})
+const latestHistoryTime = computed(() => historyList.value[0]?.time || '暂无记录')
 
 const getDetectionLabel = (classId: number) => CLASS_TEXT_MAP[classId] || '未知'
 const getDetectionColor = (classId: number) => CLASS_COLOR_MAP[classId] || DEFAULT_COLOR
@@ -358,39 +366,95 @@ onBeforeUnmount(() => {
   <div class="app-shell">
     <AppHeader :user-name="currentUserName" @logout="handleLogout" />
 
-    <main class="app-content">
-      <CanvasViewer
-        :image-url="imageUrl"
-        :loading="loading"
-        :is-dragging="transform.isDragging"
-        :has-detections="detectionsCount > 0"
-        @canvas-mounted="setCanvasRef"
-        @zoom="handleZoom"
-        @reset="resetTransform"
-        @save="saveAsImage"
-        @export="exportResult"
-        @upload="handleUpload"
-        @drag-start="startDrag"
-        @drag="dragCanvas"
-        @drag-end="stopDrag"
-      />
+    <main class="page-body">
+      <section class="hero-panel">
+        <div class="hero-copy">
+          <p class="eyebrow">User Workspace</p>
+          <h1>动物识别工作台</h1>
+          <p class="hero-text">
+            上传图像、查看检测框、回放历史记录，并把当前识别结果导出为结构化数据。
+          </p>
+        </div>
 
-      <aside class="sidebar-section">
-        <HistoryPanel
-          :items="historyList"
-          :active-record-id="selectedRecordId"
-          @select="loadHistory"
-          @delete="deleteHistory"
-          @clear="clearAllHistory"
-        />
+        <div class="hero-status">
+          <span class="status-chip">当前缩放 {{ canvasZoomText }}</span>
+          <span class="status-chip subtle">最近记录 {{ latestHistoryTime }}</span>
+        </div>
+      </section>
 
-        <DetectionList
-          :detections="detections"
-          :stats="stats"
-          :active-index="activeIndex"
-          @select="selectDetection"
+      <section class="summary-grid">
+        <StatCard
+          label="历史记录"
+          :value="historyCount"
+          accent="#0f766e"
+          description="你已保存到系统中的识别历史数量。"
         />
-      </aside>
+        <StatCard
+          label="当前目标"
+          :value="detectionsCount"
+          accent="#1d4ed8"
+          description="当前画布图像中识别到的目标总数。"
+        />
+        <StatCard
+          label="高亮目标"
+          :value="activeDetectionLabel"
+          accent="#b45309"
+          description="右侧选中的检测结果会在画布中联动高亮。"
+        />
+        <StatCard
+          label="工作状态"
+          :value="loading ? '识别中' : '就绪'"
+          accent="#7c3aed"
+          description="上传图像后会自动请求后端并刷新历史面板。"
+        />
+      </section>
+
+      <section class="workspace-grid">
+        <div class="workspace-main">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-eyebrow">Canvas Workspace</p>
+                <h2>识别画布</h2>
+              </div>
+              <span class="panel-note">支持拖拽、缩放、导出结果图与 JSON</span>
+            </div>
+
+            <CanvasViewer
+              :image-url="imageUrl"
+              :loading="loading"
+              :is-dragging="transform.isDragging"
+              :has-detections="detectionsCount > 0"
+              @canvas-mounted="setCanvasRef"
+              @zoom="handleZoom"
+              @reset="resetTransform"
+              @save="saveAsImage"
+              @export="exportResult"
+              @upload="handleUpload"
+              @drag-start="startDrag"
+              @drag="dragCanvas"
+              @drag-end="stopDrag"
+            />
+          </article>
+        </div>
+
+        <aside class="sidebar-section">
+          <HistoryPanel
+            :items="historyList"
+            :active-record-id="selectedRecordId"
+            @select="loadHistory"
+            @delete="deleteHistory"
+            @clear="clearAllHistory"
+          />
+
+          <DetectionList
+            :detections="detections"
+            :stats="stats"
+            :active-index="activeIndex"
+            @select="selectDetection"
+          />
+        </aside>
+      </section>
     </main>
   </div>
 </template>
@@ -401,39 +465,215 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 0;
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: #fff;
 }
 
 .app-shell {
-  --primary: #4f46e5;
-  --border: #d1d5db;
-  min-height: 100vh;
-  background: #fff;
+  --primary: #0f766e;
+  --border: rgba(148, 163, 184, 0.22);
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 32%),
+    radial-gradient(circle at right 24%, rgba(191, 219, 254, 0.4), transparent 26%),
+    linear-gradient(180deg, #f7fafc 0%, #eef4f7 100%);
   color: #1e293b;
   display: flex;
   flex-direction: column;
   font-family: system-ui, -apple-system, sans-serif;
 }
 
-.app-content {
+.page-body {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  align-content: start;
+}
+
+.hero-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 18px;
+  padding: 28px;
+  border-radius: 28px;
+  background: linear-gradient(135deg, #0f2f33 0%, #16555b 55%, #6ea28f 100%);
+  color: #f8fafc;
+  box-shadow: 0 24px 60px rgba(15, 47, 51, 0.18);
+}
+
+.eyebrow,
+.panel-eyebrow {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.eyebrow {
+  color: rgba(248, 250, 252, 0.74);
+}
+
+.hero-panel h1 {
+  margin: 0;
+  font-size: clamp(34px, 5vw, 52px);
+  line-height: 1;
+}
+
+.hero-text {
+  max-width: 700px;
+  margin: 12px 0 0;
+  font-size: 16px;
+  line-height: 1.8;
+  color: rgba(248, 250, 252, 0.88);
+}
+
+.hero-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 10px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  backdrop-filter: blur(10px);
+}
+
+.status-chip.subtle {
+  color: rgba(248, 250, 252, 0.82);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.workspace-grid {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(280px, 3fr);
-  gap: 4px;
-  padding: 4px;
-  box-sizing: border-box;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.workspace-main,
+.sidebar-section {
+  min-height: 0;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: clamp(360px, 58vh, 720px);
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.05);
+  backdrop-filter: blur(12px);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.panel-eyebrow {
+  color: #94a3b8;
+}
+
+.panel-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 24px;
+}
+
+.panel-note {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .sidebar-section {
   display: flex;
   min-height: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: 18px;
 }
 
 * {
   box-sizing: border-box;
+}
+
+@media (max-width: 1280px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 860px) {
+  .page-body {
+    padding: 14px;
+    gap: 14px;
+  }
+
+  .hero-panel {
+    padding: 22px 20px;
+  }
+
+  .panel {
+    min-height: clamp(320px, 52vh, 560px);
+  }
+}
+
+@media (max-width: 720px) {
+  .page-body {
+    padding: 12px;
+  }
+
+  .hero-panel {
+    flex-direction: column;
+    align-items: start;
+    padding: 22px 18px;
+  }
+
+  .hero-status,
+  .summary-grid {
+    width: 100%;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    min-height: auto;
+    padding: 18px;
+  }
+
+  .panel-header {
+    flex-direction: column;
+    align-items: start;
+  }
 }
 </style>

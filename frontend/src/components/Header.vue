@@ -32,10 +32,11 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 56px;
-  padding: 0 12px;
+  height: 64px;
+  padding: 0 18px;
   border-bottom: 1px solid var(--border);
-  background: #fff;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(16px);
   flex-shrink: 0;
 }
 
@@ -48,10 +49,10 @@ const emit = defineEmits<{
 .logo-box {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: #eef2ff;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.16), rgba(56, 189, 248, 0.16));
   color: var(--primary);
   font-size: 12px;
   font-weight: 800;
@@ -60,7 +61,7 @@ const emit = defineEmits<{
 
 .title-group h1 {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   color: var(--primary);
 }
@@ -79,19 +80,20 @@ const emit = defineEmits<{
 
 .user-chip {
   border-radius: 999px;
-  background: #f8fafc;
+  background: rgba(255, 255, 255, 0.88);
   color: #475569;
-  padding: 6px 10px;
+  padding: 8px 12px;
   font-size: 12px;
   font-weight: 700;
+  border: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 .logout-button {
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.88);
   color: #334155;
-  padding: 7px 12px;
+  padding: 8px 14px;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;

@@ -36,6 +36,16 @@ export interface AdminManagedUser {
   record_count: number
 }
 
+export interface AdminCreateUserPayload {
+  username: string
+  password: string
+  role: AdminManagedUser['role']
+}
+
+export interface AdminResetPasswordPayload {
+  password: string
+}
+
 export interface AdminOverview {
   summary: AdminSummary
   recent_users: AdminRecentUser[]
@@ -48,5 +58,14 @@ export const getAdminOverview = () => request.get<AdminOverview>('/admin/overvie
 export const getAdminUsers = () =>
   request.get<{ users: AdminManagedUser[] }>('/admin/users/')
 
+export const createAdminUser = (payload: AdminCreateUserPayload) =>
+  request.post<{ user: AdminManagedUser }>('/admin/users/create/', payload)
+
 export const updateAdminUserRole = (userId: number, role: AdminManagedUser['role']) =>
   request.patch<{ user: AdminManagedUser }>(`/admin/users/${userId}/role/`, { role })
+
+export const deleteAdminUser = (userId: number) =>
+  request.delete<{ success: boolean }>(`/admin/users/${userId}/delete/`)
+
+export const resetAdminUserPassword = (userId: number, payload: AdminResetPasswordPayload) =>
+  request.patch<{ success: boolean }>(`/admin/users/${userId}/password/`, payload)
