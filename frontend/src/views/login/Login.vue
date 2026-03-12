@@ -43,12 +43,18 @@
               />
             </div>
 
+            <p v-if="successMessage" class="success-message">{{ successMessage }}</p>
             <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
             <button type="submit" class="login-button" :disabled="loading">
               {{ loading ? '登录中...' : '登录' }}
             </button>
           </form>
+
+          <p class="login-footer">
+            还没有账号？
+            <RouterLink to="/register">去注册</RouterLink>
+          </p>
         </div>
       </section>
     </div>
@@ -56,20 +62,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, ref } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
-import request from '@/api/request'
+import { login } from '@/api/auth'
 
 const router = useRouter()
+const route = useRoute()
 
 const username = ref('')
 const password = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
+const successMessage = ref('')
 
 const handleLogin = async () => {
   errorMessage.value = ''
+  successMessage.value = ''
 
   if (!username.value || !password.value) {
     errorMessage.value = '用户名和密码不能为空'
@@ -79,7 +88,7 @@ const handleLogin = async () => {
   loading.value = true
 
   try {
-    const response = await request.post('/login/', {
+    const response = await login({
       username: username.value,
       password: password.value,
     })
@@ -99,6 +108,13 @@ const handleLogin = async () => {
     loading.value = false
   }
 }
+
+onMounted(() => {
+  if (route.query.registered === '1' && typeof route.query.username === 'string') {
+    username.value = route.query.username
+    successMessage.value = '注册成功，请输入密码登录'
+  }
+})
 </script>
 
 <style scoped>
@@ -250,6 +266,13 @@ const handleLogin = async () => {
   background: #ffffff;
 }
 
+.success-message {
+  margin: -6px 0 0;
+  color: #15803d;
+  text-align: left;
+  font-size: 14px;
+}
+
 .error-message {
   margin: -6px 0 0;
   color: #c2410c;
@@ -281,6 +304,22 @@ const handleLogin = async () => {
 .login-button:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+.login-footer {
+  margin: 18px 0 0;
+  color: #5b6b75;
+  font-size: 14px;
+}
+
+.login-footer a {
+  color: #2c7a6c;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.login-footer a:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 980px) {

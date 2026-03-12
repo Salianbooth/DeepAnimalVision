@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import request, { API_ORIGIN } from '@/api/request'
+import { useRouter } from 'vue-router'
 import AppHeader from '@/components/Header.vue'
 import CanvasViewer from '@/components/CanvasViewer.vue'
 import DetectionList from '@/components/DetectionList.vue'
@@ -27,6 +28,7 @@ const HIGHLIGHT_COLOR = '#F59E0B'
 const MIN_SCALE = 0.2
 const MAX_SCALE = 10
 
+const router = useRouter()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const detections = ref<Detection[]>([])
 const imageUrl = ref<string | null>(null)
@@ -35,6 +37,7 @@ const loading = ref(false)
 const activeIndex = ref<number | null>(null)
 const selectedRecordId = ref<number | null>(null)
 const previewObjectUrl = ref<string | null>(null)
+const currentUserName = ref('')
 
 const historyStore = useHistoryStore()
 const { historyList } = storeToRefs(historyStore)
@@ -332,7 +335,15 @@ const handleUpload = async (file: File | null) => {
   }
 }
 
+const handleLogout = () => {
+  localStorage.removeItem('user')
+  router.push('/login')
+}
+
 onMounted(async () => {
+  const userStr = localStorage.getItem('user')
+  const user = userStr ? JSON.parse(userStr) : null
+  currentUserName.value = typeof user?.username === 'string' ? user.username : ''
   await loadRecords()
   window.addEventListener('resize', drawCanvas)
 })
@@ -345,7 +356,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="app-shell">
-    <AppHeader />
+    <AppHeader :user-name="currentUserName" @logout="handleLogout" />
 
     <main class="app-content">
       <CanvasViewer

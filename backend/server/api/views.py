@@ -1,5 +1,6 @@
 import json
 
+from django.db.models import Count
 from django.contrib.auth import authenticate, login
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -15,6 +16,13 @@ def get_authenticated_user(request):
     if request.user.is_authenticated:
         return request.user
     return None
+
+
+def get_admin_user(request):
+    user = get_authenticated_user(request)
+    if user is None or user.role != "admin":
+        return None
+    return user
 
 
 @csrf_exempt
@@ -85,6 +93,131 @@ def login_view(request):
                 "username": user.username,
                 "role": user.role,
             },
+        }
+    )
+
+
+def admin_overview(request):
+    if request.method != "GET":
+        return JsonResponse({"error": "GET only"}, status=405)
+
+    admin_user = get_admin_user(request)
+    if admin_user is None:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+
+    total_users = User.objects.filter(role="user").count()
+    total_admins = User.objects.filter(role="admin").count()
+    total_records = Record.objects.count()
+    total_detections = Detection.objects.count()
+
+    recent_users = [
+        {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+            "joined_at": user.date_joined.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        for user in User.objects.order_by("-date_joined")[:6]
+    ]
+
+    recent_records = [
+        {
+            "id": record.id,
+            "username": record.user.username,
+            "image": record.image.url if record.image else "",
+            "created_at": record.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "detection_count": record.detections.count(),
+        }
+        for record in Record.objects.select_related("user").order_by("-created_at")[:8]
+    ]
+
+    top_labels = [
+        {
+            "label": item["label"],
+            "count": item["count"],
+        }
+        for item in Detection.objects.values("label").annotate(count=Count("id")).order_by("-count", "label")[:6]
+    ]
+
+    return JsonResponse(
+        {
+            "summary": {
+                "total_users": total_users,
+                "total_admins": total_admins,
+                "total_records": total_records,
+                "total_detections": total_detections,
+            },
+            "recent_users": recent_users,
+            "recent_records": recent_records,
+            "top_labels": top_labels,
+        }
+    )
+
+
+def admin_user_list(request):
+    if request.method != "GET":
+        return JsonResponse({"error": "GET only"}, status=405)
+
+    admin_user = get_admin_user(request)
+    if admin_user is None:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+
+    users = [
+        {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+            "is_active": user.is_active,
+            "joined_at": user.date_joined.strftime("%Y-%m-%d %H:%M:%S"),
+            "record_count": user.records.count(),
+        }
+        for user in User.objects.order_by("-date_joined")
+    ]
+
+    return JsonResponse({"users": users})
+
+
+@csrf_exempt
+def admin_update_user_role(request, user_id):
+    if request.method not in {"PATCH", "POST"}:
+        return JsonResponse({"error": "PATCH or POST only"}, status=405)
+
+    admin_user = get_admin_user(request)
+    if admin_user is None:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+
+    try:
+        data = json.loads(request.body.decode())
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    role = data.get("role")
+    if role not in {"user", "admin"}:
+        return JsonResponse({"error": "Invalid role"}, status=400)
+
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+
+    if user.id == admin_user.id and role != "admin":
+        return JsonResponse({"error": "You cannot remove your own admin role"}, status=400)
+
+    user.role = role
+    user.is_staff = role == "admin"
+    user.is_superuser = role == "admin"
+    user.save(update_fields=["role", "is_staff", "is_superuser"])
+
+    return JsonResponse(
+        {
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "role": user.role,
+                "is_active": user.is_active,
+                "joined_at": user.date_joined.strftime("%Y-%m-%d %H:%M:%S"),
+                "record_count": user.records.count(),
+            }
         }
     )
 
