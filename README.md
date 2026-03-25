@@ -1,147 +1,193 @@
-# DeepAnimalVision 🐾
+# DeepAnimalVision
 
-基于深度学习的动物图像检测与识别系统（前后端分离）
+DeepAnimalVision is a full-stack image detection system built with `Vue 3 + Django + YOLO`.
+It provides a complete workflow for:
 
-DeepAnimalVision 是一个基于深度学习的动物图像检测与识别系统，采用**前后端分离架构**，支持图片上传、目标检测、结果可视化、检测结果高亮联动以及历史记录管理。
-项目完整覆盖了从模型推理到前端交互展示的全过程，适合作为 **课程设计 / 毕业设计 / AI 应用实践项目**。
+- user registration/login
+- image upload and object detection
+- canvas visualization with zoom/pan/highlight
+- detection history playback
+- admin-side user management and system overview
 
-## ✨ 功能特性
+The project is suitable for coursework, graduation projects, and AI application demos.
 
-- 📤 图片上传并发送至后端进行识别
-- 🧠 使用深度学习模型进行 目标检测（YOLO 系列）
-- 🖼 Canvas 绘制检测框（类别 + 置信度），支持：
-  - 缩放、平移、拖拽
-  - 检测框高亮联动
-  - 缩放时线宽自适应保持清晰
-- 📋 检测结果列表展示
-- 🔶 点击列表高亮对应检测框
-- 🕘 历史识别记录管理
-- 📦 检测结果导出（JSON）
-- 🖌 UI 布局优化：
-  - 删除左侧空白，标题、图片区、右侧卡片紧贴左侧
-  - 右侧卡片边框贴紧浏览器边界，上下左右自适应
+## Features
 
-## 🏗 项目整体架构
+### User-side
 
-```CSS
-Frontend (Vue 3 + Vite + TS)
-        ↓ HTTP / Axios
-Backend (Django)
-        ↓
-YOLO 模型推理
-        ↓
-JSON 检测结果
-        ↓
-Canvas 可视化 + 交互列表
+- Upload images and run detection (`/api/detect/`)
+- Draw detection boxes on Canvas (with confidence labels)
+- Zoom, drag, reset canvas view
+- Click detection list to highlight boxes
+- Save rendered image and export JSON result
+- View/delete history records and clear all history
 
+### Admin-side
+
+- Dashboard summary (`/api/admin/overview/`)
+- View all users (`/api/admin/users/`)
+- Create user (`/api/admin/users/create/`)
+- Update user role (`/api/admin/users/<id>/role/`)
+- Delete user (`/api/admin/users/<id>/delete/`)
+- Reset user password (`/api/admin/users/<id>/password/`)
+
+## Tech Stack
+
+- Frontend: `Vue 3`, `TypeScript`, `Vite`, `Pinia`, `Axios`
+- Backend: `Django 4.2`, `SQLite`, `PyTorch`, `Ultralytics YOLO`, `OpenCV`
+
+## Project Structure
+
+```text
+DeepAnimalVision/
+├── frontend/                  # Vue 3 frontend
+│   ├── src/
+│   │   ├── views/
+│   │   │   ├── login/         # login/register
+│   │   │   ├── user/          # user workspace
+│   │   │   └── admin/         # admin dashboard
+│   │   ├── api/               # frontend API wrappers
+│   │   ├── store/             # Pinia stores
+│   │   └── components/        # shared components
+│   └── package.json
+├── backend/
+│   └── server/
+│       ├── api/               # detection/auth/admin APIs
+│       ├── users/             # custom user model
+│       ├── recognition/       # YOLO inference logic
+│       ├── media/             # uploaded images
+│       ├── db.sqlite3
+│       └── manage.py
+├── requirements.txt
+└── README.md
 ```
 
-## 🧰 技术栈
+## Quick Start
 
-### 前端（Frontend）
-- Vue 3 + TypeScript + Vite
-- Axios
-- HTML Canvas
-- Pinia（状态管理）
+## 1) Backend
 
-### 后端（Backend）
-- Django 
-- PyTorch
-- YOLO 系列目标检测模型
-- OpenCV（图像处理）
+Prerequisites:
 
-## 🚀 项目搭建与开发过程记录
+- Python 3.9+ (recommended 3.10/3.11)
+- `pip`
 
-### 1️⃣ 前端工程初始化
-使用 Vite + Vue 3 + TypeScript 初始化前端项目，安装基础依赖：
+Install dependencies:
 
 ```bash
-npm create vite@latest frontend
+cd backend/server
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r ..\..\requirements.txt
+```
+
+Run migrations:
+
+```bash
+python manage.py migrate
+```
+
+Start backend:
+
+```bash
+python manage.py runserver
+```
+
+Backend default URL: `http://127.0.0.1:8000`
+
+## 2) Frontend
+
+Prerequisites:
+
+- Node.js 18+ (recommended 20+)
+- npm
+
+Install and run:
+
+```bash
 cd frontend
 npm install
-npm install axios pinia
+npm run dev
 ```
 
-### 📌 常见问题记录
+Frontend default URL: `http://127.0.0.1:5173`
 
-| 问题 | 原因 | 解决方法 |
-|------|------|----------|
-| ❌ Failed to resolve import "pinia" | 依赖未安装 | ✅ npm install pinia |
+## 3) Login and Roles
 
-### 2️⃣ 图片上传与后端接口联通
-- 使用 `<input type="file">` 上传图片
-- 通过 FormData 发送至 FastAPI 后端
-- 接收后端返回的检测结果（JSON）
+- Register a normal user from `/register`
+- Login page automatically redirects:
+  - `role=user` -> `/user`
+  - `role=admin` -> `/admin`
 
-```javascript
-axios.post('http://127.0.0.1:8000/api/detect/', formData)
+Note:
+
+- Admin APIs require an authenticated admin session.
+- Role checks are enforced in backend and frontend route guards.
+
+## API Overview
+
+Auth:
+
+- `POST /api/register/`
+- `POST /api/login/`
+
+Detection & history:
+
+- `POST /api/detect/`
+- `GET /api/records/`
+- `GET /api/records/<record_id>/`
+- `DELETE /api/records/<record_id>/delete/`
+- `DELETE /api/records/clear/`
+
+Admin:
+
+- `GET /api/admin/overview/`
+- `GET /api/admin/users/`
+- `POST /api/admin/users/create/`
+- `PATCH /api/admin/users/<user_id>/role/`
+- `DELETE /api/admin/users/<user_id>/delete/`
+- `PATCH /api/admin/users/<user_id>/password/`
+
+## Troubleshooting
+
+PowerShell blocks `npm` scripts:
+
+Use:
+
+```bash
+npm.cmd run dev
 ```
 
-### 3️⃣ Canvas 绘制与交互优化
-- 删除左侧空白，页面布局紧贴左侧
-- 缩放、平移、拖拽逻辑保持一致，线宽自适应
-- 检测框和高亮状态绘制保持同步
-- 右侧卡片历史记录和检测结果边框 贴紧浏览器边界，上下左右自适应
-- 提升整体 UI 的紧凑感和响应式适配
+instead of:
 
-### 4️⃣ 检测结果列表与高亮联动
-- 点击列表项高亮对应检测框
-- Canvas 与列表状态保持同步
-
-### 5️⃣ 历史记录功能（进行中）
-- 保存每次识别的图片与结果
-- 展示历史记录列表
-- 支持单条删除 / 全部清空
-- 点击历史记录可重新查看识别结果
-
-## ✅ 当前功能完成度
-
-| 功能 | 状态 |
-|------|------|
-| 图片上传 | ✅ 完成 |
-| 后端模型推理 | ✅ 完成 |
-| Canvas 检测框绘制 | ✅ 完成 |
-| 缩放 / 平移 / 拖拽 | ✅ 完成 |
-| 类别 & 置信度显示 | ✅ 完成 |
-| 结果列表展示 | ✅ 完成 |
-| 点击高亮联动 | ✅ 完成 |
-| 历史记录重现 | ✅ 完成 |
-| 历史记录删除 | 🔄 进行中 |
-| 结果导出 | 🔄 进行中 |
-| UI 布局优化 | 🔄 进行中 |
-
-## 🛣 后续开发路线
-
-### 短期
-- 历史记录删除 / 清空
-
-### 中期
-- 替换为真实动物数据集
-- 支持结果筛选与统计分析
-- 优化 UI 布局和响应式体验
-
-### 长期
-- 视频流目标检测
-- 用户系统（登录 / 记录归属）
-- Docker 化部署
-- 模型在线微调与增量更新
-
-## 📌 Git 提交规范
-**提交格式**：
-```
-[类型] 描述（不超过50字）
+```bash
+npm run dev
 ```
 
-**示例**：
-```
-[feat] 新增检测结果列表高亮交互
-[fix] 修复 canvas 重绘异常问题
-[docs] 更新 README 项目说明
-```
+Vite/TS config weird import errors:
 
-## 🧑‍💻 作者
-- 开发者：Salianbooth
-- 项目用途：课程设计 / 毕业设计 / 学习研究
+- Ensure there are no stale compiled files in `frontend/src` (like `*.js`, `*.vue.js`)
+- Keep only source files (`.ts`, `.vue`)
 
-## 📄 License
-本项目仅用于学习与研究目的，禁止直接用于商业用途。
+Small laptop screen shows clipped UI:
+
+- This project now supports vertical scrolling on both user and admin pages.
+- If cached styles remain, restart dev server and hard refresh browser.
+
+## Current Status
+
+Implemented:
+
+- full user detection flow
+- history replay and deletion
+- admin dashboard and user management
+- responsive layout for laptop and external monitor switching
+
+Recommended next iteration:
+
+- add unit/integration tests for admin APIs
+- add operation audit logs (who changed role/password)
+- add account enable/disable control
+
+## License
+
+This repository is for learning and research purposes.
