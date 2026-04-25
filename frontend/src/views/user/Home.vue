@@ -8,12 +8,13 @@ import CanvasViewer from '@/components/CanvasViewer.vue'
 import DetectionList from '@/components/DetectionList.vue'
 import HistoryPanel from '@/components/HistoryPanel.vue'
 import StatCard from '@/components/StatCard.vue'
-import { CLASS_COLOR_MAP, CLASS_TEXT_MAP } from '@/constants/classMap'
+import { CLASS_COLOR_MAP } from '@/constants/classMap'
 import { useHistoryStore } from '@/store/history'
 import type { Detection, HistoryItem } from '@/store/history'
 
 interface RawDetection {
   class_id?: number
+  label?: string
   confidence?: number
   bbox?: number[]
 }
@@ -56,37 +57,42 @@ const detectionsCount = computed(() => detections.value.length)
 const historyCount = computed(() => historyList.value.length)
 const canvasZoomText = computed(() => `${Math.round(transform.scale * 100)}%`)
 const activeDetectionLabel = computed(() => {
-  if (activeIndex.value === null) return '未选中目标'
-  return detections.value[activeIndex.value]?.label || '未选中目标'
+  if (activeIndex.value === null) return 'No selection'
+  return detections.value[activeIndex.value]?.label || 'No selection'
 })
-const latestHistoryTime = computed(() => historyList.value[0]?.time || '暂无记录')
+const latestHistoryTime = computed(() => historyList.value[0]?.time || 'No records')
 
-const getDetectionLabel = (classId: number) => CLASS_TEXT_MAP[classId] || '未知'
 const getDetectionColor = (classId: number) => CLASS_COLOR_MAP[classId] || DEFAULT_COLOR
+const getFallbackLabel = (classId: number) => (classId >= 0 ? `class_${classId}` : 'unknown')
 
 const stats = computed<DetectionStat[]>(() => {
-  const countMap: Record<number, number> = {}
+  const countMap: Record<string, DetectionStat> = {}
 
   detections.value.forEach(det => {
-    if (det.class_id >= 0) {
-      countMap[det.class_id] = (countMap[det.class_id] || 0) + 1
+    const key = `${det.class_id}:${det.label}`
+
+    if (countMap[key]) {
+      countMap[key].count += 1
+      return
+    }
+
+    countMap[key] = {
+      label: det.label,
+      count: 1,
+      color: getDetectionColor(det.class_id),
     }
   })
 
-  return Object.entries(countMap).map(([classId, count]) => {
-    const id = Number(classId)
-    return {
-      label: getDetectionLabel(id),
-      count,
-      color: getDetectionColor(id),
-    }
-  })
+  return Object.values(countMap)
 })
 
 const normalizeDetections = (raw: RawDetection[] = []): Detection[] =>
   raw.map(det => ({
     class_id: det.class_id ?? -1,
-    label: getDetectionLabel(det.class_id ?? -1),
+    label:
+      typeof det.label === 'string' && det.label.trim()
+        ? det.label
+        : getFallbackLabel(det.class_id ?? -1),
     confidence: det.confidence ?? 0,
     bbox: Array.isArray(det.bbox) ? det.bbox.slice(0, 4) : [0, 0, 0, 0],
   }))
@@ -253,12 +259,12 @@ const loadHistory = async (item: Pick<HistoryItem, 'id'>) => {
     selectedRecordId.value = item.id
     resetTransform()
   } catch (error) {
-    console.error('加载历史记录失败', error)
+    console.error('Failed to load record', error)
   }
 }
 
 const deleteHistory = async (item: Pick<HistoryItem, 'id'>) => {
-  if (!window.confirm('确认删除该历史记录吗？')) return
+  if (!window.confirm('Delete this record?')) return
 
   const shouldClearCanvas = selectedRecordId.value === item.id
   await historyStore.removeRecord(item.id)
@@ -270,7 +276,7 @@ const deleteHistory = async (item: Pick<HistoryItem, 'id'>) => {
 }
 
 const clearAllHistory = async () => {
-  if (!window.confirm('确认清空所有历史记录吗？该操作不可恢复')) return
+  if (!window.confirm('Clear all history? This cannot be undone.')) return
 
   await historyStore.clearAll()
   selectedRecordId.value = null
@@ -337,7 +343,7 @@ const handleUpload = async (file: File | null) => {
     await loadRecords()
   } catch (error) {
     URL.revokeObjectURL(nextPreviewUrl)
-    console.error('图片识别失败', error)
+    console.error('Detection failed', error)
   } finally {
     loading.value = false
   }
@@ -370,42 +376,43 @@ onBeforeUnmount(() => {
       <section class="hero-panel">
         <div class="hero-copy">
           <p class="eyebrow">User Workspace</p>
-          <h1>动物识别工作台</h1>
+          <h1>Animal Detection Console</h1>
           <p class="hero-text">
-            上传图像、查看检测框、回放历史记录，并把当前识别结果导出为结构化数据。
+            Upload an image, inspect detection boxes, review past runs, and export the current
+            result as an image or JSON file.
           </p>
         </div>
 
         <div class="hero-status">
-          <span class="status-chip">当前缩放 {{ canvasZoomText }}</span>
-          <span class="status-chip subtle">最近记录 {{ latestHistoryTime }}</span>
+          <span class="status-chip">Zoom {{ canvasZoomText }}</span>
+          <span class="status-chip subtle">Latest record {{ latestHistoryTime }}</span>
         </div>
       </section>
 
       <section class="summary-grid">
         <StatCard
-          label="历史记录"
+          label="History"
           :value="historyCount"
           accent="#0f766e"
-          description="你已保存到系统中的识别历史数量。"
+          description="Saved detection records linked to the current user."
         />
         <StatCard
-          label="当前目标"
+          label="Detections"
           :value="detectionsCount"
           accent="#1d4ed8"
-          description="当前画布图像中识别到的目标总数。"
+          description="Objects currently shown on the canvas."
         />
         <StatCard
-          label="高亮目标"
+          label="Active Label"
           :value="activeDetectionLabel"
           accent="#b45309"
-          description="右侧选中的检测结果会在画布中联动高亮。"
+          description="The highlighted detection in the result list and canvas."
         />
         <StatCard
-          label="工作状态"
-          :value="loading ? '识别中' : '就绪'"
+          label="Status"
+          :value="loading ? 'Running' : 'Ready'"
           accent="#7c3aed"
-          description="上传图像后会自动请求后端并刷新历史面板。"
+          description="Uploading starts backend inference and refreshes the history list."
         />
       </section>
 
@@ -415,9 +422,9 @@ onBeforeUnmount(() => {
             <div class="panel-header">
               <div>
                 <p class="panel-eyebrow">Canvas Workspace</p>
-                <h2>识别画布</h2>
+                <h2>Detection Canvas</h2>
               </div>
-              <span class="panel-note">支持拖拽、缩放、导出结果图与 JSON</span>
+              <span class="panel-note">Pan, zoom, save the image, or export the JSON result.</span>
             </div>
 
             <CanvasViewer

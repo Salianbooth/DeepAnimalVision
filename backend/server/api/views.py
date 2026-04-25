@@ -348,10 +348,11 @@ def detect(request):
     detections_response = []
 
     for det in results:
+        label = det.get("label") or get_label(det["class_id"])
         detection = Detection.objects.create(
             record=record,
             class_id=det["class_id"],
-            label=get_label(det["class_id"]),
+            label=label,
             confidence=det["confidence"],
             x1=det["bbox"][0],
             y1=det["bbox"][1],
