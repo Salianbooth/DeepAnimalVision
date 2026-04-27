@@ -345,6 +345,29 @@
             </div>
           </section>
         </template>
+
+        <!-- 确认弹窗 -->
+        <Teleport to="body">
+          <div v-if="confirmDialog.visible" class="dialog-mask" @click.self="cancelConfirm">
+            <div class="dialog-box" role="alertdialog" aria-modal="true">
+              <div class="dialog-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <div class="dialog-body">
+                <h3>{{ confirmDialog.title }}</h3>
+                <p>{{ confirmDialog.message }}</p>
+              </div>
+              <div class="dialog-actions">
+                <button type="button" class="dialog-cancel" @click="cancelConfirm">取消</button>
+                <button type="button" class="dialog-confirm" @click="confirmAction">确认删除</button>
+              </div>
+            </div>
+          </div>
+        </Teleport>
       </section>
     </main>
   </div>
@@ -493,14 +516,42 @@ const handleResetPassword = async () => {
   }
 }
 
-const deleteUser = async (userId: number, username: string) => {
-  if (!window.confirm(`确认删除用户 ${username} 吗？该操作不可恢复。`)) return
+const confirmDialog = ref<{
+  visible: boolean
+  title: string
+  message: string
+  onConfirm: (() => Promise<void>) | null
+}>({
+  visible: false,
+  title: '',
+  message: '',
+  onConfirm: null,
+})
 
-  try {
-    await adminStore.removeUser(userId)
-    await adminStore.fetchOverview()
-  } catch {
-    // errors are surfaced through the store
+const cancelConfirm = () => {
+  confirmDialog.value.visible = false
+  confirmDialog.value.onConfirm = null
+}
+
+const confirmAction = async () => {
+  if (!confirmDialog.value.onConfirm) return
+  await confirmDialog.value.onConfirm()
+  cancelConfirm()
+}
+
+const deleteUser = (userId: number, username: string) => {
+  confirmDialog.value = {
+    visible: true,
+    title: '删除用户',
+    message: `确认删除用户 "${username}" 吗？该操作不可恢复。`,
+    onConfirm: async () => {
+      try {
+        await adminStore.removeUser(userId)
+        await adminStore.fetchOverview()
+      } catch {
+        // errors are surfaced through the store
+      }
+    },
   }
 }
 
@@ -1055,6 +1106,105 @@ onMounted(async () => {
   margin: 0;
   color: #94a3b8;
   font-size: 14px;
+}
+
+.dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  animation: fade-in 0.15s ease;
+}
+
+.dialog-box {
+  width: min(420px, calc(100vw - 32px));
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 32px 80px rgba(15, 23, 42, 0.22);
+  padding: 28px;
+  display: grid;
+  gap: 20px;
+  animation: slide-up 0.18s ease;
+}
+
+.dialog-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.dialog-body h3 {
+  margin: 0 0 8px;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.dialog-body p {
+  margin: 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dialog-cancel {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 12px;
+  background: #fff;
+  color: #475569;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dialog-cancel:hover {
+  background: #f8fafc;
+}
+
+.dialog-confirm {
+  border: 1px solid rgba(220, 38, 38, 0.18);
+  border-radius: 12px;
+  background: #dc2626;
+  color: #fff;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dialog-confirm:hover {
+  background: #b91c1c;
+}
+
+@keyframes fade-in {
+  from { opacity: 0 }
+  to   { opacity: 1 }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px) }
+  to   { opacity: 1; transform: translateY(0) }
 }
 
 @media (max-width: 1280px) {
