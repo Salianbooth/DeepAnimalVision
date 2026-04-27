@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { storeToRefs } from 'pinia'
-import request, { API_ORIGIN } from '@/api/request'
-import { useRouter } from 'vue-router'
-import AppHeader from '@/components/Header.vue'
+
+import request from '@/api/request'
 import CanvasViewer from '@/components/CanvasViewer.vue'
 import DetectionList from '@/components/DetectionList.vue'
-import HistoryPanel from '@/components/HistoryPanel.vue'
 import StatCard from '@/components/StatCard.vue'
+import {
+  getAnimalCategory,
+  getAnimalCategoryMeta,
+  getAnimalCategoryMetaByLabel,
+  type AnimalCategory,
+} from '@/constants/animalCategories'
 import { CLASS_COLOR_MAP } from '@/constants/classMap'
 import { useHistoryStore } from '@/store/history'
-import type { Detection, HistoryItem } from '@/store/history'
+import type { Detection } from '@/store/history'
 
 interface RawDetection {
   class_id?: number
@@ -21,6 +24,7 @@ interface RawDetection {
 
 interface DetectionStat {
   label: string
+  description: string
   count: number
   color: string
 }
@@ -30,19 +34,15 @@ const HIGHLIGHT_COLOR = '#F59E0B'
 const MIN_SCALE = 0.2
 const MAX_SCALE = 10
 
-const router = useRouter()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const detections = ref<Detection[]>([])
 const imageUrl = ref<string | null>(null)
 const imageObj = ref<HTMLImageElement | null>(null)
 const loading = ref(false)
 const activeIndex = ref<number | null>(null)
-const selectedRecordId = ref<number | null>(null)
 const previewObjectUrl = ref<string | null>(null)
-const currentUserName = ref('')
 
 const historyStore = useHistoryStore()
-const { historyList } = storeToRefs(historyStore)
 
 const transform = reactive({
   scale: 1,
@@ -54,36 +54,40 @@ const transform = reactive({
 })
 
 const detectionsCount = computed(() => detections.value.length)
-const historyCount = computed(() => historyList.value.length)
 const canvasZoomText = computed(() => `${Math.round(transform.scale * 100)}%`)
-const activeDetectionLabel = computed(() => {
-  if (activeIndex.value === null) return 'No selection'
-  return detections.value[activeIndex.value]?.label || 'No selection'
-})
-const latestHistoryTime = computed(() => historyList.value[0]?.time || 'No records')
+const activeDetection = computed(() =>
+  activeIndex.value === null ? null : detections.value[activeIndex.value] || null,
+)
+const activeDetectionLabel = computed(() => activeDetection.value?.label || '未选中目标')
+const activeDetectionCategory = computed(() =>
+  activeDetection.value ? getAnimalCategoryMetaByLabel(activeDetection.value.label).name : '未分类',
+)
+const activeDetectionConfidence = computed(() =>
+  activeDetection.value ? `${(activeDetection.value.confidence * 100).toFixed(1)}%` : '--',
+)
 
 const getDetectionColor = (classId: number) => CLASS_COLOR_MAP[classId] || DEFAULT_COLOR
 const getFallbackLabel = (classId: number) => (classId >= 0 ? `class_${classId}` : 'unknown')
 
-const stats = computed<DetectionStat[]>(() => {
-  const countMap: Record<string, DetectionStat> = {}
+const categoryStats = computed<DetectionStat[]>(() => {
+  const countMap: Partial<Record<AnimalCategory | 'unknown', number>> = {}
 
   detections.value.forEach(det => {
-    const key = `${det.class_id}:${det.label}`
-
-    if (countMap[key]) {
-      countMap[key].count += 1
-      return
-    }
-
-    countMap[key] = {
-      label: det.label,
-      count: 1,
-      color: getDetectionColor(det.class_id),
-    }
+    const category = getAnimalCategory(det.label)
+    countMap[category] = (countMap[category] || 0) + 1
   })
 
-  return Object.values(countMap)
+  return Object.entries(countMap)
+    .map(([category, count]) => {
+      const meta = getAnimalCategoryMeta(category as AnimalCategory | 'unknown')
+      return {
+        label: meta.name,
+        description: meta.description,
+        count: count || 0,
+        color: meta.color,
+      }
+    })
+    .sort((left, right) => right.count - left.count)
 })
 
 const normalizeDetections = (raw: RawDetection[] = []): Detection[] =>
@@ -109,12 +113,9 @@ const revokePreviewObjectUrl = () => {
   previewObjectUrl.value = null
 }
 
-const loadImage = (src: string, isRemote = false) =>
+const loadImage = (src: string) =>
   new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image()
-    if (isRemote) {
-      img.crossOrigin = 'anonymous'
-    }
     img.onload = () => resolve(img)
     img.onerror = reject
     img.src = src
@@ -191,19 +192,6 @@ const resetTransform = () => {
   drawCanvas()
 }
 
-const clearCanvasState = () => {
-  revokePreviewObjectUrl()
-  detections.value = []
-  imageUrl.value = null
-  imageObj.value = null
-  activeIndex.value = null
-  transform.scale = 1
-  transform.offsetX = 0
-  transform.offsetY = 0
-  transform.isDragging = false
-  clearCanvas()
-}
-
 const setCanvasRef = (canvas: HTMLCanvasElement | null) => {
   canvasRef.value = canvas
   if (canvas && imageObj.value) {
@@ -241,48 +229,6 @@ const selectDetection = (index: number) => {
   drawCanvas()
 }
 
-const loadRecords = async () => {
-  await historyStore.fetchHistoryList()
-}
-
-const loadHistory = async (item: Pick<HistoryItem, 'id'>) => {
-  try {
-    const record = await historyStore.fetchRecordDetail(item.id)
-    const remoteImageUrl = `${API_ORIGIN}${record.image}`
-    const img = await loadImage(remoteImageUrl, true)
-
-    revokePreviewObjectUrl()
-    detections.value = normalizeDetections(record.detections)
-    imageObj.value = img
-    imageUrl.value = remoteImageUrl
-    activeIndex.value = null
-    selectedRecordId.value = item.id
-    resetTransform()
-  } catch (error) {
-    console.error('Failed to load record', error)
-  }
-}
-
-const deleteHistory = async (item: Pick<HistoryItem, 'id'>) => {
-  if (!window.confirm('Delete this record?')) return
-
-  const shouldClearCanvas = selectedRecordId.value === item.id
-  await historyStore.removeRecord(item.id)
-
-  if (shouldClearCanvas) {
-    selectedRecordId.value = null
-    clearCanvasState()
-  }
-}
-
-const clearAllHistory = async () => {
-  if (!window.confirm('Clear all history? This cannot be undone.')) return
-
-  await historyStore.clearAll()
-  selectedRecordId.value = null
-  clearCanvasState()
-}
-
 const saveAsImage = () => {
   if (!canvasRef.value) return
   const dataUrl = canvasRef.value.toDataURL('image/png')
@@ -301,6 +247,7 @@ const exportResult = () => {
         {
           image: imageUrl.value,
           detections: detections.value,
+          categories: categoryStats.value,
         },
         null,
         2,
@@ -330,7 +277,6 @@ const handleUpload = async (file: File | null) => {
     imageUrl.value = nextPreviewUrl
     detections.value = []
     activeIndex.value = null
-    selectedRecordId.value = null
     resetTransform()
 
     const formData = new FormData()
@@ -340,162 +286,153 @@ const handleUpload = async (file: File | null) => {
     const response = await request.post('/detect/', formData)
     detections.value = normalizeDetections(response.data.detections)
     drawCanvas()
-    await loadRecords()
+    await historyStore.fetchHistoryList()
   } catch (error) {
     URL.revokeObjectURL(nextPreviewUrl)
-    console.error('Detection failed', error)
+    console.error('图像识别失败', error)
   } finally {
     loading.value = false
   }
 }
 
-const handleLogout = () => {
-  localStorage.removeItem('user')
-  router.push('/login')
-}
-
-onMounted(async () => {
-  const userStr = localStorage.getItem('user')
-  const user = userStr ? JSON.parse(userStr) : null
-  currentUserName.value = typeof user?.username === 'string' ? user.username : ''
-  await loadRecords()
+onMounted(() => {
   window.addEventListener('resize', drawCanvas)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', drawCanvas)
   revokePreviewObjectUrl()
+  clearCanvas()
 })
 </script>
 
 <template>
-  <div class="app-shell">
-    <AppHeader :user-name="currentUserName" @logout="handleLogout" />
+  <div class="page">
+    <section class="hero-panel">
+      <div class="hero-copy">
+        <p class="eyebrow">图像识别</p>
+        <h1>动物识别与分类分析</h1>
+        <p class="hero-text">上传图片后，系统会给出检测框、具体动物类别和动物大类分布。</p>
+      </div>
 
-    <main class="page-body">
-      <section class="hero-panel">
-        <div class="hero-copy">
-          <p class="eyebrow">User Workspace</p>
-          <h1>Animal Detection Console</h1>
-          <p class="hero-text">
-            Upload an image, inspect detection boxes, review past runs, and export the current
-            result as an image or JSON file.
-          </p>
+      <div class="hero-status">
+        <span class="status-chip">当前缩放 {{ canvasZoomText }}</span>
+      </div>
+    </section>
+
+    <section class="summary-grid">
+      <StatCard
+        label="检测目标"
+        :value="detectionsCount"
+        accent="#0f766e"
+        description="当前图像中识别到的目标数量。"
+      />
+      <StatCard
+        label="当前选中"
+        :value="activeDetectionLabel"
+        accent="#1d4ed8"
+        description="你在右侧结果列表中选中的具体动物。"
+      />
+      <StatCard
+        label="选中目标大类"
+        :value="activeDetectionCategory"
+        accent="#b45309"
+        description="当前选中目标所属的动物大类。"
+      />
+      <StatCard
+        label="选中目标置信度"
+        :value="activeDetectionConfidence"
+        accent="#7c3aed"
+        description="模型对当前选中目标的识别把握程度。"
+      />
+    </section>
+
+    <section class="main-grid">
+      <article class="panel canvas-panel">
+        <div class="panel-header">
+          <div>
+            <p class="panel-eyebrow">识别画布</p>
+            <h2>目标框查看区</h2>
+          </div>
+          <span class="panel-note">支持拖拽、缩放、保存图片和导出 JSON。</span>
         </div>
 
-        <div class="hero-status">
-          <span class="status-chip">Zoom {{ canvasZoomText }}</span>
-          <span class="status-chip subtle">Latest record {{ latestHistoryTime }}</span>
-        </div>
-      </section>
+        <CanvasViewer
+          :image-url="imageUrl"
+          :loading="loading"
+          :is-dragging="transform.isDragging"
+          :has-detections="detectionsCount > 0"
+          @canvas-mounted="setCanvasRef"
+          @zoom="handleZoom"
+          @reset="resetTransform"
+          @save="saveAsImage"
+          @export="exportResult"
+          @upload="handleUpload"
+          @drag-start="startDrag"
+          @drag="dragCanvas"
+          @drag-end="stopDrag"
+        />
+      </article>
 
-      <section class="summary-grid">
-        <StatCard
-          label="History"
-          :value="historyCount"
-          accent="#0f766e"
-          description="Saved detection records linked to the current user."
-        />
-        <StatCard
-          label="Detections"
-          :value="detectionsCount"
-          accent="#1d4ed8"
-          description="Objects currently shown on the canvas."
-        />
-        <StatCard
-          label="Active Label"
-          :value="activeDetectionLabel"
-          accent="#b45309"
-          description="The highlighted detection in the result list and canvas."
-        />
-        <StatCard
-          label="Status"
-          :value="loading ? 'Running' : 'Ready'"
-          accent="#7c3aed"
-          description="Uploading starts backend inference and refreshes the history list."
-        />
-      </section>
-
-      <section class="workspace-grid">
-        <div class="workspace-main">
-          <article class="panel">
-            <div class="panel-header">
-              <div>
-                <p class="panel-eyebrow">Canvas Workspace</p>
-                <h2>Detection Canvas</h2>
-              </div>
-              <span class="panel-note">Pan, zoom, save the image, or export the JSON result.</span>
+      <section class="side-column">
+        <article class="panel compact-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-eyebrow">分类概览</p>
+              <h2>动物大类分布</h2>
             </div>
+            <span class="count-badge">{{ categoryStats.length }}</span>
+          </div>
 
-            <CanvasViewer
-              :image-url="imageUrl"
-              :loading="loading"
-              :is-dragging="transform.isDragging"
-              :has-detections="detectionsCount > 0"
-              @canvas-mounted="setCanvasRef"
-              @zoom="handleZoom"
-              @reset="resetTransform"
-              @save="saveAsImage"
-              @export="exportResult"
-              @upload="handleUpload"
-              @drag-start="startDrag"
-              @drag="dragCanvas"
-              @drag-end="stopDrag"
-            />
-          </article>
-        </div>
+          <div v-if="categoryStats.length > 0" class="category-grid">
+            <div
+              v-for="stat in categoryStats"
+              :key="stat.label"
+              class="category-item"
+              :style="{ borderColor: `${stat.color}30` }"
+            >
+              <span class="category-dot" :style="{ background: stat.color }"></span>
+              <div class="category-copy">
+                <div class="category-head">
+                  <strong>{{ stat.label }}</strong>
+                  <span>{{ stat.count }} 个</span>
+                </div>
+                <p>{{ stat.description }}</p>
+              </div>
+            </div>
+          </div>
+          <p v-else class="empty-state">上传图像后，这里会展示动物大类分布。</p>
+        </article>
 
-        <aside class="sidebar-section">
-          <HistoryPanel
-            :items="historyList"
-            :active-record-id="selectedRecordId"
-            @select="loadHistory"
-            @delete="deleteHistory"
-            @clear="clearAllHistory"
-          />
+        <DetectionList
+          :detections="detections"
+          :stats="categoryStats"
+          :active-index="activeIndex"
+          @select="selectDetection"
+        />
 
-          <DetectionList
-            :detections="detections"
-            :stats="stats"
-            :active-index="activeIndex"
-            @select="selectDetection"
-          />
-        </aside>
+        <article class="panel compact-panel note-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-eyebrow">使用提示</p>
+              <h2>怎么看结果</h2>
+            </div>
+          </div>
+
+          <div class="note-list">
+            <p>左侧画布显示检测框，点击右侧识别结果可以高亮对应目标。</p>
+            <p>“动物大类分布”用于把识别结果按哺乳动物、鸟类、鱼类等更大的类别汇总展示。</p>
+          </div>
+        </article>
       </section>
-    </main>
+    </section>
   </div>
 </template>
 
 <style scoped>
-:global(html),
-:global(body) {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-  background: #fff;
-}
-
-.app-shell {
-  --primary: #0f766e;
-  --border: rgba(148, 163, 184, 0.22);
-  min-height: 100dvh;
-  background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 32%),
-    radial-gradient(circle at right 24%, rgba(191, 219, 254, 0.4), transparent 26%),
-    linear-gradient(180deg, #f7fafc 0%, #eef4f7 100%);
-  color: #1e293b;
-  display: flex;
-  flex-direction: column;
-  font-family: system-ui, -apple-system, sans-serif;
-}
-
-.page-body {
+.page {
   display: grid;
   gap: 18px;
-  padding: 20px;
-  align-content: start;
 }
 
 .hero-panel {
@@ -530,7 +467,7 @@ onBeforeUnmount(() => {
 }
 
 .hero-text {
-  max-width: 700px;
+  max-width: 680px;
   margin: 12px 0 0;
   font-size: 16px;
   line-height: 1.8;
@@ -557,40 +494,42 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(10px);
 }
 
-.status-chip.subtle {
-  color: rgba(248, 250, 252, 0.82);
-}
-
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 
-.workspace-grid {
-  flex: 1;
-  min-height: 0;
+.main-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+  grid-template-columns: minmax(0, 1.7fr) minmax(360px, 0.95fr);
   gap: 18px;
   align-items: start;
 }
 
-.workspace-main,
-.sidebar-section {
-  min-height: 0;
+.side-column {
+  display: grid;
+  gap: 18px;
 }
 
 .panel {
   display: flex;
   flex-direction: column;
-  min-height: clamp(360px, 58vh, 720px);
+  min-height: 0;
   padding: 22px;
   border: 1px solid var(--border);
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 16px 36px rgba(15, 23, 42, 0.05);
   backdrop-filter: blur(12px);
+}
+
+.canvas-panel {
+  min-height: clamp(420px, 64vh, 760px);
+}
+
+.compact-panel {
+  min-height: auto;
 }
 
 .panel-header {
@@ -617,70 +556,109 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
-.sidebar-section {
+.count-badge {
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f766e;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.category-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.category-item {
   display: flex;
-  min-height: 0;
-  flex-direction: column;
-  gap: 18px;
+  align-items: start;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 14px;
 }
 
-* {
-  box-sizing: border-box;
+.category-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-top: 6px;
+  flex-shrink: 0;
 }
 
-@media (max-width: 1280px) {
+.category-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.category-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+
+.category-head strong {
+  color: #0f172a;
+}
+
+.category-head span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.category-copy p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.note-list {
+  display: grid;
+  gap: 10px;
+}
+
+.note-list p,
+.empty-state {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+@media (max-width: 1320px) {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .workspace-grid {
+  .main-grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-height: 860px) {
-  .page-body {
-    padding: 14px;
-    gap: 14px;
-  }
-
-  .hero-panel {
-    padding: 22px 20px;
-  }
-
-  .panel {
-    min-height: clamp(320px, 52vh, 560px);
-  }
-}
-
 @media (max-width: 720px) {
-  .page-body {
-    padding: 12px;
-  }
-
   .hero-panel {
     flex-direction: column;
     align-items: start;
     padding: 22px 18px;
   }
 
-  .hero-status,
-  .summary-grid {
-    width: 100%;
-  }
-
   .summary-grid {
     grid-template-columns: 1fr;
   }
 
-  .panel {
-    min-height: auto;
-    padding: 18px;
-  }
-
-  .panel-header {
+  .panel-header,
+  .category-head {
     flex-direction: column;
     align-items: start;
+  }
+
+  .panel {
+    padding: 18px;
   }
 }
 </style>

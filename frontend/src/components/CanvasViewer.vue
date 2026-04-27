@@ -46,9 +46,9 @@ onMounted(() => {
       <div v-if="props.imageUrl && !props.loading" class="floating-toolbar">
         <button type="button" @click="emit('zoom', 0.2)">+</button>
         <button type="button" @click="emit('zoom', -0.2)">-</button>
-        <button type="button" @click="emit('reset')">Reset</button>
+        <button type="button" @click="emit('reset')">重置</button>
         <div class="v-line"></div>
-        <button type="button" class="btn-save" @click="emit('save')">Save</button>
+        <button type="button" class="btn-save" @click="emit('save')">保存图片</button>
       </div>
 
       <div v-if="props.loading" class="loading-overlay">
@@ -61,8 +61,8 @@ onMounted(() => {
       <div v-if="!props.imageUrl && !props.loading" class="canvas-placeholder">
         <div class="placeholder-content">
           <span class="icon">IMG</span>
-          <h3>准备就绪</h3>
-          <p>请上传图像以开始检测</p>
+          <h3>等待上传图像</h3>
+          <p>上传一张图片后即可开始动物识别与分类展示。</p>
         </div>
       </div>
     </div>

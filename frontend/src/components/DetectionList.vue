@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import {
+  getAnimalCategoryDescription,
+  getAnimalCategoryMetaByLabel,
+} from '@/constants/animalCategories'
 import { CLASS_COLOR_MAP } from '@/constants/classMap'
 import type { Detection } from '@/store/history'
 
@@ -24,7 +28,7 @@ const getDetectionColor = (classId: number) => CLASS_COLOR_MAP[classId] || '#8B5
 <template>
   <div class="card">
     <div class="card-header">
-      <span>检测结果</span>
+      <span>识别结果</span>
       <span v-if="detections.length > 0" class="badge">{{ detections.length }}</span>
     </div>
 
@@ -49,12 +53,28 @@ const getDetectionColor = (classId: number) => CLASS_COLOR_MAP[classId] || '#8B5
           @click="emit('select', index)"
         >
           <i :style="{ background: getDetectionColor(det.class_id) }"></i>
-          <span class="name">{{ det.label }}</span>
+
+          <div class="det-copy">
+            <span class="name">{{ det.label }}</span>
+            <div class="detail-row">
+              <span
+                class="category-chip"
+                :style="{
+                  background: `${getAnimalCategoryMetaByLabel(det.label).color}20`,
+                  color: getAnimalCategoryMetaByLabel(det.label).color,
+                }"
+              >
+                {{ getAnimalCategoryMetaByLabel(det.label).name }}
+              </span>
+              <span class="category-desc">{{ getAnimalCategoryDescription(det.label) }}</span>
+            </div>
+          </div>
+
           <span class="conf">{{ (det.confidence * 100).toFixed(0) }}%</span>
         </div>
       </div>
 
-      <div v-if="detections.length === 0" class="empty">暂无检测结果</div>
+      <div v-if="detections.length === 0" class="empty">暂无识别结果</div>
     </div>
   </div>
 </template>
@@ -116,12 +136,13 @@ const getDetectionColor = (classId: number) => CLASS_COLOR_MAP[classId] || '#8B5
 .det-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .det-item {
   display: flex;
   align-items: center;
+  gap: 10px;
   border: 1px solid transparent;
   border-radius: 18px;
   background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
@@ -145,20 +166,47 @@ const getDetectionColor = (classId: number) => CLASS_COLOR_MAP[classId] || '#8B5
 
 .det-item i {
   width: 6px;
-  height: 18px;
-  margin-right: 10px;
+  height: 22px;
   border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.det-copy {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
 }
 
 .name {
-  flex: 1;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
+  color: #0f172a;
+}
+
+.detail-row {
+  display: grid;
+  gap: 4px;
+}
+
+.category-chip {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.category-desc {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .conf {
   font-size: 11px;
   color: #94a3b8;
+  flex-shrink: 0;
 }
 
 .empty {

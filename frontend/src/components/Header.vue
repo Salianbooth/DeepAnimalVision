@@ -14,15 +14,13 @@ const emit = defineEmits<{
       <div class="logo-box">AI</div>
       <div class="title-group">
         <h1>DeepAnimalVision</h1>
-        <p>AI 识别与细节分析控制台</p>
+        <p>动物识别与智能分析工作台</p>
       </div>
     </div>
 
     <div v-if="userName" class="header-actions">
       <span class="user-chip">{{ userName }}</span>
-      <button type="button" class="logout-button" @click="emit('logout')">
-        退出
-      </button>
+      <button type="button" class="logout-button" @click="emit('logout')">退出登录</button>
     </div>
   </header>
 </template>

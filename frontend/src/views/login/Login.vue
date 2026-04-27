@@ -100,7 +100,7 @@ const handleLogin = async () => {
     }
 
     localStorage.setItem('user', JSON.stringify(user))
-    router.push(user.role === 'admin' ? '/admin' : '/user')
+    router.push(user.role === 'admin' ? '/admin' : '/user/recognition')
   } catch (error: any) {
     errorMessage.value =
       error?.response?.data?.error || '登录失败，请检查用户名和密码'
