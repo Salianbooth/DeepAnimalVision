@@ -4,7 +4,7 @@
 
     <!-- 左侧文字区 -->
     <div class="hero-text">
-      <h1 class="hero-title">动物图像识别<br />与分类系统</h1>
+      <h1 class="hero-title">动物图像识别与分类系统</h1>
       <div class="hero-divider"></div>
       <p class="hero-sub">智能识别动物图像 &nbsp;探索自然多样之美</p>
     </div>

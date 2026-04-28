@@ -154,93 +154,22 @@
                 查看当前账户、筛选角色，并在普通用户与管理员之间切换权限。
               </p>
             </div>
-            <button
-              type="button"
-              class="hero-action"
-              :disabled="usersLoading"
-              @click="refreshUsers"
-            >
-              {{ usersLoading ? '刷新中...' : '刷新用户' }}
-            </button>
+            <div class="hero-btns">
+              <button type="button" class="hero-action" @click="openCreateDialog">
+                + 创建用户
+              </button>
+              <button
+                type="button"
+                class="hero-action"
+                :disabled="usersLoading"
+                @click="refreshUsers"
+              >
+                {{ usersLoading ? '刷新中...' : '刷新用户' }}
+              </button>
+            </div>
           </section>
 
           <p v-if="usersError" class="error-banner">{{ usersError }}</p>
-
-          <section class="create-user-panel panel full-width">
-            <div class="panel-header users-header">
-              <div>
-                <p class="panel-eyebrow">Create User</p>
-                <h2>创建用户</h2>
-              </div>
-            </div>
-
-            <form class="create-form" @submit.prevent="handleCreateUser">
-              <label class="field">
-                <span>用户名</span>
-                <input v-model.trim="createForm.username" type="text" placeholder="输入用户名" />
-              </label>
-
-              <label class="field">
-                <span>密码</span>
-                <input v-model="createForm.password" type="password" placeholder="输入初始密码" />
-              </label>
-
-              <label class="field">
-                <span>角色</span>
-                <select v-model="createForm.role">
-                  <option value="user">普通用户</option>
-                  <option value="admin">管理员</option>
-                </select>
-              </label>
-
-              <button type="submit" class="create-button" :disabled="creatingUser">
-                {{ creatingUser ? '创建中...' : '创建用户' }}
-              </button>
-            </form>
-          </section>
-
-          <section v-if="passwordResetTarget" class="create-user-panel panel full-width">
-            <div class="panel-header users-header">
-              <div>
-                <p class="panel-eyebrow">Reset Password</p>
-                <h2>重置密码</h2>
-              </div>
-              <button type="button" class="ghost-button" @click="cancelPasswordReset">
-                取消
-              </button>
-            </div>
-
-            <form class="create-form" @submit.prevent="handleResetPassword">
-              <label class="field">
-                <span>目标用户</span>
-                <input :value="passwordResetTarget.username" type="text" disabled />
-              </label>
-
-              <label class="field">
-                <span>新密码</span>
-                <input
-                  v-model="passwordResetValue"
-                  type="password"
-                  placeholder="输入新的登录密码"
-                />
-              </label>
-
-              <div class="field">
-                <span>说明</span>
-                <p class="field-note">修改后该用户需使用新密码重新登录。</p>
-              </div>
-
-              <button
-                type="submit"
-                class="create-button"
-                :disabled="resettingPasswordUserId === passwordResetTarget.id"
-              >
-                {{
-                  resettingPasswordUserId === passwordResetTarget.id ? '重置中...' : '确认重置密码'
-                }}
-              </button>
-            </form>
-          </section>
 
           <section class="filter-bar">
             <label class="search-box">
@@ -285,47 +214,23 @@
                   <strong>{{ user.username }}</strong>
                   <span v-if="user.id === currentUserId" class="self-tag">当前账号</span>
                 </div>
-                <span class="role-badge" :class="user.role">{{ user.role }}</span>
+                <span class="role-badge" :class="user.role">
+                  {{ user.role === 'admin' ? '管理员' : '普通用户' }}
+                </span>
                 <span>{{ user.record_count }}</span>
                 <span>{{ user.joined_at }}</span>
                 <div class="action-group">
                   <button
                     type="button"
-                    class="role-action"
-                    :class="{ active: user.role === 'user' }"
+                    class="manage-btn"
                     :disabled="
                       updatingUserId === user.id ||
-                      user.role === 'user' ||
-                      user.id === currentUserId
+                      deletingUserId === user.id ||
+                      resettingPasswordUserId === user.id
                     "
-                    @click="changeRole(user.id, 'user')"
+                    @click="openManageDialog(user)"
                   >
-                    设为用户
-                  </button>
-                  <button
-                    type="button"
-                    class="role-action admin"
-                    :class="{ active: user.role === 'admin' }"
-                    :disabled="updatingUserId === user.id || user.role === 'admin'"
-                    @click="changeRole(user.id, 'admin')"
-                  >
-                    设为管理员
-                  </button>
-                  <button
-                    type="button"
-                    class="role-action"
-                    :disabled="resettingPasswordUserId === user.id"
-                    @click="startPasswordReset(user)"
-                  >
-                    重置密码
-                  </button>
-                  <button
-                    type="button"
-                    class="role-action danger"
-                    :disabled="deletingUserId === user.id || user.id === currentUserId"
-                    @click="deleteUser(user.id, user.username)"
-                  >
-                    {{ deletingUserId === user.id ? '删除中...' : '删除用户' }}
+                    管理
                   </button>
                 </div>
               </div>
@@ -346,11 +251,140 @@
           </section>
         </template>
 
-        <!-- 确认弹窗 -->
+        <!-- 所有弹窗 -->
         <Teleport to="body">
+          <!-- 创建用户弹窗 -->
+          <div v-if="createDialog.visible" class="dialog-mask" @click.self="closeCreateDialog">
+            <div class="dialog-box dialog-form" role="dialog" aria-modal="true">
+              <div class="dialog-head">
+                <div class="dialog-icon icon-create">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                    <line x1="12" y1="14" x2="12" y2="20"/>
+                    <line x1="9" y1="17" x2="15" y2="17"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3>创建用户</h3>
+                  <p>填写信息后新建一个账户</p>
+                </div>
+                <button type="button" class="dialog-close" @click="closeCreateDialog">✕</button>
+              </div>
+              <form @submit.prevent="handleCreateUser">
+                <div class="form-fields">
+                  <label class="field">
+                    <span>用户名</span>
+                    <input v-model.trim="createDialog.username" type="text" placeholder="输入用户名" autocomplete="off" />
+                  </label>
+                  <label class="field">
+                    <span>密码</span>
+                    <input v-model="createDialog.password" type="password" placeholder="输入初始密码" autocomplete="new-password" />
+                  </label>
+                  <label class="field">
+                    <span>角色</span>
+                    <select v-model="createDialog.role">
+                      <option value="user">普通用户</option>
+                      <option value="admin">管理员</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="dialog-actions">
+                  <button type="button" class="dialog-cancel" @click="closeCreateDialog">取消</button>
+                  <button type="submit" class="dialog-primary" :disabled="creatingUser">
+                    {{ creatingUser ? '创建中...' : '创建用户' }}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- 管理用户弹窗 -->
+          <div v-if="manageDialog.visible" class="dialog-mask" @click.self="closeManageDialog">
+            <div class="dialog-box dialog-form" role="dialog" aria-modal="true">
+              <div class="dialog-head">
+                <div class="dialog-icon icon-manage">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3>{{ manageDialog.user?.username }}</h3>
+                  <p>管理该用户的角色与权限</p>
+                </div>
+                <button type="button" class="dialog-close" @click="closeManageDialog">✕</button>
+              </div>
+
+              <div class="manage-section">
+                <p class="manage-label">当前角色</p>
+                <div class="role-switch">
+                  <button
+                    type="button"
+                    class="role-switch-btn"
+                    :class="{ active: manageDialog.user?.role === 'user' }"
+                    :disabled="manageDialog.user?.role === 'user' || updatingUserId === manageDialog.user?.id || manageDialog.user?.id === currentUserId"
+                    @click="changeRole('user')"
+                  >
+                    普通用户
+                  </button>
+                  <button
+                    type="button"
+                    class="role-switch-btn admin"
+                    :class="{ active: manageDialog.user?.role === 'admin' }"
+                    :disabled="manageDialog.user?.role === 'admin' || updatingUserId === manageDialog.user?.id"
+                    @click="changeRole('admin')"
+                  >
+                    管理员
+                  </button>
+                </div>
+                <p v-if="manageDialog.user?.id === currentUserId" class="manage-hint">当前账号无法降权</p>
+              </div>
+
+              <div class="manage-section">
+                <p class="manage-label">重置密码</p>
+                <div v-if="!manageDialog.showPasswordField" class="password-toggle">
+                  <button type="button" class="ghost-btn" @click="manageDialog.showPasswordField = true">
+                    点击设置新密码
+                  </button>
+                </div>
+                <div v-else class="password-row">
+                  <input
+                    v-model="manageDialog.newPassword"
+                    type="password"
+                    placeholder="输入新密码"
+                    autocomplete="new-password"
+                    class="password-input"
+                  />
+                  <button
+                    type="button"
+                    class="dialog-primary"
+                    :disabled="resettingPasswordUserId === manageDialog.user?.id"
+                    @click="handleResetPassword"
+                  >
+                    {{ resettingPasswordUserId === manageDialog.user?.id ? '重置中...' : '确认重置' }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="dialog-footer">
+                <button
+                  type="button"
+                  class="dialog-danger"
+                  :disabled="deletingUserId === manageDialog.user?.id || manageDialog.user?.id === currentUserId"
+                  @click="deleteUser"
+                >
+                  {{ deletingUserId === manageDialog.user?.id ? '删除中...' : '删除用户' }}
+                </button>
+                <button type="button" class="dialog-cancel" @click="closeManageDialog">关闭</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 删除确认弹窗 -->
           <div v-if="confirmDialog.visible" class="dialog-mask" @click.self="cancelConfirm">
             <div class="dialog-box" role="alertdialog" aria-modal="true">
-              <div class="dialog-icon">
+              <div class="dialog-icon icon-danger">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                   <line x1="12" y1="9" x2="12" y2="13"/>
@@ -363,7 +397,9 @@
               </div>
               <div class="dialog-actions">
                 <button type="button" class="dialog-cancel" @click="cancelConfirm">取消</button>
-                <button type="button" class="dialog-confirm" @click="confirmAction">确认删除</button>
+                <button type="button" class="dialog-confirm" :disabled="confirmDialog.submitting" @click="confirmAction">
+                  {{ confirmDialog.submitting ? '删除中...' : '确认删除' }}
+                </button>
               </div>
             </div>
           </div>
@@ -419,13 +455,6 @@ const currentUserId = ref<number | null>(null)
 const activeSection = ref<AdminSection>('overview')
 const searchKeyword = ref('')
 const roleFilter = ref<RoleFilter>('all')
-const createForm = ref({
-  username: '',
-  password: '',
-  role: 'user' as AdminManagedUser['role'],
-})
-const passwordResetTarget = ref<AdminManagedUser | null>(null)
-const passwordResetValue = ref('')
 
 const summary = computed(() => overview.value.summary)
 const recentUsers = computed(() => overview.value.recent_users)
@@ -459,73 +488,96 @@ const refreshUsers = async () => {
   await adminStore.fetchUsers()
 }
 
-const changeRole = async (userId: number, role: AdminManagedUser['role']) => {
-  try {
-    await adminStore.changeUserRole(userId, role)
-    await adminStore.fetchOverview()
-  } catch {
-    // errors are surfaced through the store
-  }
-}
+// ── 创建用户弹窗 ──────────────────────────────────────────
+const createDialog = ref({
+  visible: false,
+  username: '',
+  password: '',
+  role: 'user' as AdminManagedUser['role'],
+})
 
+const openCreateDialog = () => {
+  createDialog.value = { visible: true, username: '', password: '', role: 'user' }
+}
+const closeCreateDialog = () => {
+  createDialog.value.visible = false
+}
 const handleCreateUser = async () => {
-  if (!createForm.value.username || !createForm.value.password) {
+  if (!createDialog.value.username || !createDialog.value.password) {
     adminStore.usersError = '请填写用户名和密码'
     return
   }
-
   try {
     await adminStore.createUser({
-      username: createForm.value.username,
-      password: createForm.value.password,
-      role: createForm.value.role,
+      username: createDialog.value.username,
+      password: createDialog.value.password,
+      role: createDialog.value.role,
     })
-    createForm.value = {
-      username: '',
-      password: '',
-      role: 'user',
-    }
+    closeCreateDialog()
     await adminStore.fetchOverview()
   } catch {
     // errors are surfaced through the store
   }
 }
 
-const startPasswordReset = (user: AdminManagedUser) => {
-  passwordResetTarget.value = user
-  passwordResetValue.value = ''
+// ── 管理用户弹窗（角色 + 重置密码 + 删除） ───────────────
+const manageDialog = ref<{
+  visible: boolean
+  user: AdminManagedUser | null
+  newPassword: string
+  showPasswordField: boolean
+}>({
+  visible: false,
+  user: null,
+  newPassword: '',
+  showPasswordField: false,
+})
+
+const openManageDialog = (user: AdminManagedUser) => {
+  manageDialog.value = { visible: true, user, newPassword: '', showPasswordField: false }
+}
+const closeManageDialog = () => {
+  manageDialog.value.visible = false
 }
 
-const cancelPasswordReset = () => {
-  passwordResetTarget.value = null
-  passwordResetValue.value = ''
-}
-
-const handleResetPassword = async () => {
-  if (!passwordResetTarget.value) return
-  if (!passwordResetValue.value) {
-    adminStore.usersError = '请输入新密码'
-    return
-  }
-
+const changeRole = async (role: AdminManagedUser['role']) => {
+  if (!manageDialog.value.user) return
   try {
-    await adminStore.resetUserPassword(passwordResetTarget.value.id, passwordResetValue.value)
-    cancelPasswordReset()
+    await adminStore.changeUserRole(manageDialog.value.user.id, role)
+    manageDialog.value.user = { ...manageDialog.value.user, role }
+    await adminStore.fetchOverview()
   } catch {
     // errors are surfaced through the store
   }
 }
 
+const handleResetPassword = async () => {
+  if (!manageDialog.value.user || !manageDialog.value.newPassword) {
+    adminStore.usersError = '请输入新密码'
+    return
+  }
+  try {
+    await adminStore.resetUserPassword(manageDialog.value.user.id, manageDialog.value.newPassword)
+    manageDialog.value.newPassword = ''
+    manageDialog.value.showPasswordField = false
+  } catch {
+    // errors are surfaced through the store
+  }
+}
+
+// ── 删除确认弹窗 ──────────────────────────────────────────
 const confirmDialog = ref<{
   visible: boolean
   title: string
   message: string
   onConfirm: (() => Promise<void>) | null
+  submitting: boolean
 }>({
   visible: false,
   title: '',
   message: '',
   onConfirm: null,
+  submitting: false,
 })
 
 const cancelConfirm = () => {
@@ -535,18 +587,24 @@ const cancelConfirm = () => {
 
 const confirmAction = async () => {
   if (!confirmDialog.value.onConfirm) return
+  confirmDialog.value.submitting = true
   await confirmDialog.value.onConfirm()
+  confirmDialog.value.submitting = false
   cancelConfirm()
 }
 
-const deleteUser = (userId: number, username: string) => {
+const deleteUser = () => {
+  const user = manageDialog.value.user
+  if (!user) return
   confirmDialog.value = {
     visible: true,
     title: '删除用户',
-    message: `确认删除用户 "${username}" 吗？该操作不可恢复。`,
+    message: `确认删除用户 "${user.username}" 吗？该操作不可恢复。`,
+    submitting: false,
     onConfirm: async () => {
       try {
-        await adminStore.removeUser(userId)
+        await adminStore.removeUser(user.id)
+        closeManageDialog()
         await adminStore.fetchOverview()
       } catch {
         // errors are surfaced through the store
@@ -909,81 +967,6 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 
-.create-user-panel {
-  display: grid;
-  gap: 16px;
-}
-
-.create-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr) 180px 140px;
-  gap: 12px;
-  align-items: end;
-}
-
-.field {
-  display: grid;
-  gap: 6px;
-  color: #475569;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.field input,
-.field select {
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 12px 14px;
-  color: #0f172a;
-}
-
-.field input:disabled {
-  color: #64748b;
-  background: rgba(248, 250, 252, 0.9);
-}
-
-.field input:focus,
-.field select:focus {
-  outline: none;
-  border-color: rgba(15, 118, 110, 0.4);
-  box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
-}
-
-.create-button {
-  border: 1px solid rgba(15, 118, 110, 0.18);
-  border-radius: 14px;
-  background: linear-gradient(135deg, #0f766e 0%, #38bdf8 100%);
-  color: #fff;
-  padding: 12px 14px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.create-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-.ghost-button {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.88);
-  color: #475569;
-  padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.field-note {
-  margin: 0;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 1.7;
-}
-
 .search-box {
   display: grid;
   gap: 6px;
@@ -1071,35 +1054,25 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 
-.role-action {
-  border: 1px solid rgba(15, 118, 110, 0.18);
+.manage-btn {
+  border: 1px solid rgba(15, 118, 110, 0.22);
   border-radius: 12px;
   background: #fff;
   color: #0f766e;
-  padding: 8px 10px;
-  font-size: 12px;
+  padding: 8px 16px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.15s;
 }
 
-.role-action.admin {
-  border-color: rgba(37, 99, 235, 0.18);
-  color: #1d4ed8;
+.manage-btn:hover {
+  background: rgba(15, 118, 110, 0.06);
 }
 
-.role-action.danger {
-  border-color: rgba(220, 38, 38, 0.16);
-  color: #dc2626;
-}
-
-.role-action.active {
-  background: #e2e8f0;
-  color: #0f172a;
-}
-
-.role-action:disabled {
+.manage-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .empty-state {
@@ -1121,7 +1094,7 @@ onMounted(async () => {
 }
 
 .dialog-box {
-  width: min(420px, calc(100vw - 32px));
+  width: min(460px, calc(100vw - 32px));
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 24px;
   background: #fff;
@@ -1132,20 +1105,223 @@ onMounted(async () => {
   animation: slide-up 0.18s ease;
 }
 
-.dialog-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  background: rgba(220, 38, 38, 0.08);
-  color: #dc2626;
+.dialog-form {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dialog-head > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.dialog-head h3 {
+  margin: 0 0 4px;
+  color: #0f172a;
+  font-size: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dialog-head p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.dialog-close {
+  border: none;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+.dialog-close:hover {
+  background: #e2e8f0;
+}
+
+.dialog-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .dialog-icon svg {
   width: 24px;
   height: 24px;
+}
+
+.icon-create {
+  background: rgba(15, 118, 110, 0.1);
+  color: #0f766e;
+}
+
+.icon-manage {
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+}
+
+.icon-danger {
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+}
+
+.form-fields {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.field input,
+.field select {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 12px 14px;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.field input:focus,
+.field select:focus {
+  outline: none;
+  border-color: rgba(15, 118, 110, 0.4);
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
+}
+
+.manage-section {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.manage-label {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.manage-hint {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.role-switch {
+  display: flex;
+  gap: 8px;
+}
+
+.role-switch-btn {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #475569;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.role-switch-btn.active {
+  background: rgba(15, 118, 110, 0.1);
+  border-color: rgba(15, 118, 110, 0.3);
+  color: #0f766e;
+}
+
+.role-switch-btn.admin.active {
+  background: rgba(37, 99, 235, 0.1);
+  border-color: rgba(37, 99, 235, 0.3);
+  color: #1d4ed8;
+}
+
+.role-switch-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.password-toggle {
+  display: flex;
+}
+
+.ghost-btn {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: #64748b;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+}
+
+.ghost-btn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.password-row {
+  display: flex;
+  gap: 10px;
+}
+
+.password-input {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: #0f172a;
+  min-width: 0;
+}
+
+.password-input:focus {
+  outline: none;
+  border-color: rgba(15, 118, 110, 0.4);
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
 }
 
 .dialog-body h3 {
@@ -1182,6 +1358,23 @@ onMounted(async () => {
   background: #f8fafc;
 }
 
+.dialog-primary {
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #0f766e 0%, #38bdf8 100%);
+  color: #fff;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dialog-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 .dialog-confirm {
   border: 1px solid rgba(220, 38, 38, 0.18);
   border-radius: 12px;
@@ -1195,6 +1388,38 @@ onMounted(async () => {
 
 .dialog-confirm:hover {
   background: #b91c1c;
+}
+
+.dialog-confirm:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.dialog-danger {
+  border: 1px solid rgba(220, 38, 38, 0.18);
+  border-radius: 12px;
+  background: transparent;
+  color: #dc2626;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dialog-danger:hover {
+  background: rgba(220, 38, 38, 0.06);
+}
+
+.dialog-danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.hero-btns {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 @keyframes fade-in {
@@ -1218,10 +1443,6 @@ onMounted(async () => {
 
   .users-head,
   .users-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .create-form {
     grid-template-columns: minmax(0, 1fr);
   }
 }
