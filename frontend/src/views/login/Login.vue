@@ -4,9 +4,12 @@
 
     <!-- 左侧文字区 -->
     <div class="hero-text">
-      <h1 class="hero-title">动物图像识别与分类系统</h1>
+      <h1 class="hero-title">
+        <span>动物图像识别</span>
+        <span>与分类系统</span>
+      </h1>
       <div class="hero-divider"></div>
-      <p class="hero-sub">智能识别动物图像 &nbsp;探索自然多样之美</p>
+      <p class="hero-sub">智能识别动物图像&nbsp;&nbsp;探索自然多样之美</p>
     </div>
 
     <div class="login-card">
@@ -132,11 +135,8 @@ onMounted(() => {
 <style scoped>
 .login-page {
   position: relative;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 clamp(40px, 7vw, 110px);
+  width: 100vw;
+  height: 100vh;
   overflow: hidden;
 }
 
@@ -150,50 +150,65 @@ onMounted(() => {
   z-index: 0;
 }
 
-/* ── 左侧文字区：轻毛玻璃底，整体上移 ── */
+/* ── 左侧文字区：精确绝对定位 ── */
 .hero-text {
-  position: relative;
+  position: absolute;
   z-index: 1;
-  flex: 1;
-  max-width: 480px;
-  margin-right: 48px;
-  margin-bottom: 80px;
-  padding: 28px 32px 28px clamp(60px, 12vw, 180px);
+  /* 左边缘距页面左边 1/10 屏宽 */
+  left: 20vw;
+  /* 顶部距页面顶部 1/5 屏高 */
+  top: 20vh;
+  /* 宽度：从 1/10 到 2/5，即 3/10 屏宽 */
+  width: 30vw;
 }
 
 .hero-title {
   margin: 0;
-  font-size: clamp(38px, 5.2vw, 62px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  font-size: clamp(32px, 4.2vw, 58px);
   font-weight: 900;
-  line-height: 1.18;
+  line-height: 1.2;
   color: #163829;
-  letter-spacing: 0.05em;
-  text-shadow: 0 2px 12px rgba(255,255,255,0.55);
+  letter-spacing: 0.04em;
+  text-shadow: 0 2px 14px rgba(255, 255, 255, 0.6);
+}
+
+.hero-title span {
+  display: block;
 }
 
 .hero-divider {
-  width: 52px;
+  /* 宽度约为容器的 1/5（即标题宽度的 1/5） */
+  width: 20%;
   height: 4px;
   background: #3a8055;
   border-radius: 2px;
-  margin: 22px 0 16px;
+  /* 距标题底部 20px，水平居中于容器（即标题）中间 */
+  margin: 20px auto 16px;
 }
 
 .hero-sub {
   margin: 0;
-  font-size: clamp(14px, 1.4vw, 16px);
-  color: #2e5040;
-  letter-spacing: 0.08em;
-  text-shadow: 0 1px 8px rgba(255,255,255,0.5);
+  font-size: clamp(13px, 1.1vw, 15px);
+  color: #1e3d2a;
+  letter-spacing: 0.1em;
+  font-weight: 500;
+  text-shadow: 0 1px 10px rgba(255, 255, 255, 0.6);
 }
 
-/* ── Card：更大，更靠右 ── */
+/* ── 登录卡片：靠右侧固定位置 ── */
 .login-card {
-  position: relative;
+  position: absolute;
   z-index: 1;
-  width: min(460px, 92vw);
-  flex-shrink: 0;
-  padding: 52px 44px 40px;
+  /* 右侧 6vw 留白 */
+  right: 6vw;
+  /* 垂直居中 */
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(420px, 38vw);
+  padding: 48px 40px 38px;
   border-radius: 24px;
   background: rgba(248, 251, 248, 0.88);
   box-shadow:
@@ -205,7 +220,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0;
 }
 
 /* ── Header ── */
@@ -364,17 +378,20 @@ onMounted(() => {
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
-  .login-page {
-    justify-content: center;
-    padding: 16px;
-  }
-
   .hero-text {
     display: none;
   }
 
   .login-card {
-    width: 100%;
+    position: relative;
+    right: auto;
+    top: auto;
+    transform: none;
+    width: calc(100vw - 32px);
+    margin: auto;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     padding: 36px 24px 28px;
   }
 }
