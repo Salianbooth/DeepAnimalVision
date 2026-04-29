@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 
 import request from '@/api/request'
+import AnimalInfoModal from '@/components/AnimalInfoModal.vue'
 import CanvasViewer from '@/components/CanvasViewer.vue'
 import DetectionList from '@/components/DetectionList.vue'
 import {
@@ -39,6 +40,7 @@ const imageUrl = ref<string | null>(null)
 const imageObj = ref<HTMLImageElement | null>(null)
 const loading = ref(false)
 const activeIndex = ref<number | null>(null)
+const showInfoModal = ref(false)
 const previewObjectUrl = ref<string | null>(null)
 
 const historyStore = useHistoryStore()
@@ -225,6 +227,7 @@ const handleZoom = (delta: number) => {
 
 const selectDetection = (index: number) => {
   activeIndex.value = index
+  showInfoModal.value = true
   drawCanvas()
 }
 
@@ -307,6 +310,14 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page">
+    <section class="hero hero-recognition">
+      <div class="hero-copy">
+        <p class="eyebrow">图像识别</p>
+        <h1>动物识别与分类分析</h1>
+        <p class="hero-text">上传图片后，系统会给出检测框、具体动物类别和动物大类分布。</p>
+      </div>
+    </section>
+
     <div class="main-grid">
       <!-- 左侧：Canvas 面板 -->
       <article class="panel canvas-panel">
@@ -372,6 +383,12 @@ onBeforeUnmount(() => {
         @select="selectDetection"
       />
     </div>
+
+    <AnimalInfoModal
+      v-if="showInfoModal"
+      :detection="activeDetection"
+      @close="showInfoModal = false"
+    />
   </div>
 </template>
 
@@ -380,6 +397,40 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 18px;
   height: 100%;
+}
+
+.hero {
+  padding: 28px;
+  border-radius: 28px;
+  color: #f8fafc;
+  box-shadow: 0 24px 60px rgba(15, 47, 51, 0.18);
+}
+
+.hero-recognition {
+  background: linear-gradient(135deg, #0f2f33 0%, #16555b 55%, #6ea28f 100%);
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.74);
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 46px);
+  line-height: 1.1;
+}
+
+.hero-text {
+  max-width: 680px;
+  margin: 10px 0 0;
+  font-size: 15px;
+  line-height: 1.7;
+  color: rgba(248, 250, 252, 0.88);
 }
 
 .main-grid {

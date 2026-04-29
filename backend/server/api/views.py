@@ -465,3 +465,21 @@ def record_clear(request):
 
     Record.objects.filter(user=user).delete()
     return JsonResponse({"success": True})
+
+
+def record_stats(request):
+    if request.method != "GET":
+        return JsonResponse({"error": "GET only"}, status=405)
+
+    user = get_authenticated_user(request)
+    if user is None:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+
+    label_counts = (
+        Detection.objects.filter(record__user=user)
+        .values("label")
+        .annotate(count=Count("id"))
+        .order_by("-count", "label")
+    )
+
+    return JsonResponse({"stats": [{"label": item["label"], "count": item["count"]} for item in label_counts]})

@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import DetectionList from '@/components/DetectionList.vue'
-import StatCard from '@/components/StatCard.vue'
+import AnimalInfoModal from '@/components/AnimalInfoModal.vue'
 import {
   getAnimalCategory,
   getAnimalCategoryMeta,
@@ -11,7 +11,7 @@ import {
 } from '@/constants/animalCategories'
 import { CLASS_COLOR_MAP } from '@/constants/classMap'
 import { useHistoryStore } from '@/store/history'
-import type { HistoryItem, RecordDetail } from '@/store/history'
+import type { HistoryItem, RecordDetail, LabelStat } from '@/store/history'
 
 interface DetectionStat {
   label: string
@@ -24,11 +24,12 @@ const DEFAULT_COLOR = '#8B5CF6'
 const HIGHLIGHT_COLOR = '#F59E0B'
 
 const historyStore = useHistoryStore()
-const { historyList } = storeToRefs(historyStore)
+const { historyList, globalLabelStats } = storeToRefs(historyStore)
 
 const searchKeyword = ref('')
 const selectedRecordId = ref<number | null>(null)
 const activeDetectionIndex = ref<number | null>(null)
+const showInfoModal = ref(false)
 const selectedRecord = ref<RecordDetail | null>(null)
 const historyCanvasRef = ref<HTMLCanvasElement | null>(null)
 const historyImageObj = ref<HTMLImageElement | null>(null)
@@ -42,6 +43,8 @@ const filteredRecords = computed(() => {
     return time.includes(keyword) || String(item.id).includes(keyword)
   })
 })
+
+const selectedDetections = computed(() => selectedRecord.value?.detections || [])
 
 const categoryStats = computed<DetectionStat[]>(() => {
   const countMap: Partial<Record<AnimalCategory | 'unknown', number>> = {}
@@ -65,7 +68,47 @@ const categoryStats = computed<DetectionStat[]>(() => {
 })
 
 const dominantCategory = computed(() => categoryStats.value[0]?.label || '暂无')
-const selectedDetections = computed(() => selectedRecord.value?.detections || [])
+
+const categoryPercentages = computed(() => {
+  const total = selectedDetections.value.length
+  if (total === 0) return []
+  return categoryStats.value.map(stat => ({
+    ...stat,
+    percent: Math.round((stat.count / total) * 100),
+  }))
+})
+
+const globalTotal = computed(() => globalLabelStats.value.reduce((s, x) => s + x.count, 0))
+
+const globalCategoryBars = computed(() => {
+  const total = globalTotal.value
+  if (total === 0) return []
+
+  const categoryCountMap: Partial<Record<AnimalCategory | 'unknown', { count: number; color: string; name: string }>> = {}
+
+  globalLabelStats.value.forEach((item: LabelStat) => {
+    const category = getAnimalCategory(item.label)
+    const meta = getAnimalCategoryMeta(category)
+    if (!categoryCountMap[category]) {
+      categoryCountMap[category] = { count: 0, color: meta.color, name: meta.name }
+    }
+    categoryCountMap[category]!.count += item.count
+  })
+
+  return Object.values(categoryCountMap)
+    .sort((a, b) => b!.count - a!.count)
+    .map(item => ({
+      name: item!.name,
+      count: item!.count,
+      color: item!.color,
+      percent: Math.round((item!.count / total) * 100),
+    }))
+})
+const activeHistoryDetection = computed(() =>
+  activeDetectionIndex.value === null
+    ? null
+    : selectedDetections.value[activeDetectionIndex.value] || null,
+)
 
 const getDetectionColor = (classId: number) => CLASS_COLOR_MAP[classId] || DEFAULT_COLOR
 
@@ -156,6 +199,7 @@ const selectRecord = async (item: Pick<HistoryItem, 'id'>) => {
 
 const handleSelectDetection = (index: number) => {
   activeDetectionIndex.value = index
+  showInfoModal.value = true
   drawHistoryCanvas()
 }
 
@@ -163,6 +207,7 @@ const deleteRecord = async (item: HistoryItem) => {
   if (!window.confirm(`确认删除历史记录 #${item.id} 吗？`)) return
 
   await historyStore.removeRecord(item.id)
+  await historyStore.fetchStats()
 
   if (selectedRecordId.value === item.id) {
     selectedRecord.value = null
@@ -187,10 +232,12 @@ const clearAll = async () => {
   activeDetectionIndex.value = null
   historyImageObj.value = null
   clearHistoryCanvas()
+  // globalLabelStats cleared by store.clearAll()
 }
 
 onMounted(async () => {
   await historyStore.fetchHistoryList()
+  await historyStore.fetchStats()
 
   const firstRecord = historyList.value[0]
   if (firstRecord) {
@@ -215,31 +262,51 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section class="summary-grid">
-      <StatCard
-        label="历史记录"
-        :value="historyList.length"
-        accent="#0f766e"
-        description="当前账号下已经保存的识别记录数量。"
-      />
-      <StatCard
-        label="当前记录目标"
-        :value="selectedDetections.length"
-        accent="#1d4ed8"
-        description="当前选中记录中包含的检测目标数量。"
-      />
-      <StatCard
-        label="主要分类"
-        :value="dominantCategory"
-        accent="#b45309"
-        description="当前记录中出现最多的动物大类。"
-      />
-      <StatCard
-        label="最近识别时间"
-        :value="historyList[0]?.time || '暂无记录'"
-        accent="#7c3aed"
-        description="最近一条识别记录保存到系统的时间。"
-      />
+    <!-- 仪表盘：分类占比 -->
+    <section class="dashboard-panel">
+      <div class="dashboard-meta">
+        <div class="dash-stat">
+          <span class="dash-label">历史记录</span>
+          <strong class="dash-value">{{ historyList.length }}</strong>
+        </div>
+        <div class="dash-divider"></div>
+        <div class="dash-stat">
+          <span class="dash-label">累计识别</span>
+          <strong class="dash-value">{{ globalTotal }}</strong>
+        </div>
+        <div class="dash-divider"></div>
+        <div class="dash-stat">
+          <span class="dash-label">主要大类</span>
+          <strong class="dash-value">{{ globalCategoryBars[0]?.name || '暂无' }}</strong>
+        </div>
+        <div class="dash-divider"></div>
+        <div class="dash-stat">
+          <span class="dash-label">最近识别</span>
+          <strong class="dash-value dash-value--sm">{{ historyList[0]?.time || '暂无' }}</strong>
+        </div>
+      </div>
+
+      <div class="dash-chart">
+        <p class="dash-chart-title">全部识别记录 · 动物大类占比</p>
+        <div v-if="globalCategoryBars.length > 0" class="dash-bars">
+          <div
+            v-for="item in globalCategoryBars"
+            :key="item.name"
+            class="dash-bar-row"
+          >
+            <span class="dash-bar-name">{{ item.name }}</span>
+            <div class="dash-bar-track">
+              <div
+                class="dash-bar-fill"
+                :style="{ width: `${item.percent}%`, background: item.color }"
+              ></div>
+            </div>
+            <span class="dash-bar-pct" :style="{ color: item.color }">{{ item.percent }}%</span>
+            <span class="dash-bar-count">{{ item.count }} 个</span>
+          </div>
+        </div>
+        <p v-else class="dash-empty">识别过动物后，这里会显示分类占比</p>
+      </div>
     </section>
 
     <section class="history-layout">
@@ -312,34 +379,6 @@ onBeforeUnmount(() => {
           </div>
         </article>
 
-        <article class="panel compact-panel">
-          <div class="panel-header">
-            <div>
-              <p class="panel-eyebrow">分类统计</p>
-              <h2>动物大类分布</h2>
-            </div>
-          </div>
-
-          <div v-if="categoryStats.length > 0" class="category-grid">
-            <div
-              v-for="stat in categoryStats"
-              :key="stat.label"
-              class="category-item"
-              :style="{ borderColor: `${stat.color}30` }"
-            >
-              <span class="category-dot" :style="{ background: stat.color }"></span>
-              <div class="category-copy">
-                <div class="category-head">
-                  <strong>{{ stat.label }}</strong>
-                  <span>{{ stat.count }} 个</span>
-                </div>
-                <p>{{ stat.description }}</p>
-              </div>
-            </div>
-          </div>
-          <p v-else class="empty-state">当前记录暂无可展示的分类信息。</p>
-        </article>
-
         <DetectionList
           :detections="selectedDetections"
           :stats="categoryStats"
@@ -348,6 +387,12 @@ onBeforeUnmount(() => {
         />
       </section>
     </section>
+
+    <AnimalInfoModal
+      v-if="showInfoModal"
+      :detection="activeHistoryDetection"
+      @close="showInfoModal = false"
+    />
   </div>
 </template>
 
@@ -399,10 +444,128 @@ onBeforeUnmount(() => {
   color: rgba(248, 250, 252, 0.88);
 }
 
-.summary-grid {
+/* ── Dashboard panel ── */
+.dashboard-panel {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: auto 1fr;
+  gap: 24px;
+  align-items: start;
+  padding: 22px 28px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.05);
+  backdrop-filter: blur(12px);
+}
+
+.dashboard-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-right: 1px solid rgba(148, 163, 184, 0.18);
+  padding-right: 24px;
+  min-width: 130px;
+}
+
+.dash-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+}
+
+.dash-divider {
+  height: 1px;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.dash-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.dash-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.dash-value--sm {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dash-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.dash-chart-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.dash-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dash-bar-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 42px 44px;
+  align-items: center;
+  gap: 10px;
+}
+
+.dash-bar-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-bar-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  overflow: hidden;
+}
+
+.dash-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dash-bar-pct {
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.dash-bar-count {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.dash-empty {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 14px;
 }
 
 .history-layout {
@@ -602,62 +765,29 @@ onBeforeUnmount(() => {
   color: #0f172a;
 }
 
-.category-grid {
-  display: grid;
-  gap: 10px;
-}
-
-.category-item {
-  display: flex;
-  align-items: start;
-  gap: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 18px;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-  padding: 14px;
-}
-
-.category-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  margin-top: 6px;
-  flex-shrink: 0;
-}
-
-.category-copy {
-  display: grid;
-  gap: 6px;
-}
-
-.category-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 14px;
-}
-
-.category-head strong {
-  color: #0f172a;
-}
-
-.category-head span {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.category-copy p,
-.empty-state {
-  margin: 0;
-  color: #64748b;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
 @media (max-width: 1280px) {
-  .summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .dashboard-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-meta {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0;
+    border-right: none;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    padding-right: 0;
+    padding-bottom: 16px;
+  }
+
+  .dash-stat {
+    flex: 1;
+    min-width: 100px;
+    padding: 4px 12px;
+  }
+
+  .dash-divider {
+    display: none;
   }
 
   .history-layout {
@@ -670,7 +800,6 @@ onBeforeUnmount(() => {
     padding: 22px 18px;
   }
 
-  .summary-grid,
   .detail-meta {
     grid-template-columns: 1fr;
   }
@@ -679,8 +808,7 @@ onBeforeUnmount(() => {
     padding: 18px;
   }
 
-  .panel-header,
-  .category-head {
+  .panel-header {
     flex-direction: column;
     align-items: start;
   }
@@ -692,6 +820,11 @@ onBeforeUnmount(() => {
 
   .record-actions {
     grid-auto-flow: column;
+  }
+
+  .dash-bar-row {
+    grid-template-columns: 70px 1fr 38px 38px;
+    gap: 6px;
   }
 }
 </style>

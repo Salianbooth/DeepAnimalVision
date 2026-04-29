@@ -3,7 +3,8 @@ import {
   getRecords,
   getRecordDetail,
   deleteRecord,
-  clearRecords
+  clearRecords,
+  getRecordStats,
 } from '@/api/records'
 
 /**
@@ -33,12 +34,17 @@ export interface RecordDetail extends HistoryItem {
   detections: Detection[]
 }
 
+export interface LabelStat {
+  label: string
+  count: number
+}
 
 export const useHistoryStore = defineStore('history', {
   state: () => ({
     historyList: [] as HistoryItem[],
     current: null as RecordDetail | null,
-    loading: false
+    loading: false,
+    globalLabelStats: [] as LabelStat[],
   }),
 
   actions: {
@@ -93,6 +99,14 @@ export const useHistoryStore = defineStore('history', {
       await clearRecords()
       this.historyList = []
       this.current = null
+      this.globalLabelStats = []
+    },
+
+    /**
+     * 获取当前用户跨所有记录的标签聚合统计
+     */
+    async fetchStats() {
+      this.globalLabelStats = await getRecordStats()
     },
 
     /**

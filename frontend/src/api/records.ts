@@ -55,3 +55,16 @@ export async function clearRecords() {
     throw err
   }
 }
+
+/**
+ * 获取当前用户跨所有记录的动物标签统计
+ */
+export async function getRecordStats(): Promise<{ label: string; count: number }[]> {
+  try {
+    const res = await request.get('/records/stats/')
+    return Array.isArray(res.data.stats) ? res.data.stats : []
+  } catch (err) {
+    console.error('API getRecordStats failed', err)
+    return []
+  }
+}

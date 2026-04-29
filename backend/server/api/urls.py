@@ -9,6 +9,7 @@ from .views import (
     admin_user_list,
     detect,
     record_list,
+    record_stats,
     record_detail,
     record_delete,
     record_clear
@@ -23,6 +24,7 @@ urlpatterns = [
     path("admin/users/<int:user_id>/delete/", admin_delete_user),
     path("detect/", detect),
     path("records/", record_list),
+    path("records/stats/", record_stats),
     path("records/<int:record_id>/", record_detail),
     path("records/<int:record_id>/delete/", record_delete),
     path("records/clear/", record_clear),
