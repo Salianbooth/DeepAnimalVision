@@ -1,16 +1,14 @@
+// 7 大生物学粗粒度类别（脊椎动物 5 大类 + 鱼类 + 无脊椎动物）。
+// 设计原则：以分类学为依据，避免「栖息地」这类与视觉特征无关的生态属性混入主分类层。
+// 栖息地信息保留为辅助属性（见下方 AnimalHabitat 部分），不参与主分类决策。
 export type AnimalCategory =
-  | 'mammal'
-  | 'bird'
-  | 'reptile'
-  | 'amphibian'
-  | 'fish'
-  | 'insect'
-  | 'arachnid'
-  | 'crustacean'
-  | 'mollusk'
-  | 'myriapod'
-  | 'marine_invertebrate'
-  | 'annelid'
+  | 'carnivora'      // A 食肉目（猫科 / 熊科 / 犬鼬 / 浣熊小熊猫 / 鳍足）
+  | 'ungulata'       // B 有蹄类（偶蹄目 + 奇蹄目）
+  | 'other_mammal'   // C 其他哺乳类（长鼻 / 灵长 / 啮齿 / 兔 / 猬 / 有袋 / 鲸）
+  | 'aves'           // D 鸟纲
+  | 'herpetofauna'   // E 爬行与两栖类（鳄 / 有鳞 / 龟鳖 / 蛙）
+  | 'pisces'         // F 鱼类（软骨鱼 + 硬骨鱼）
+  | 'invertebrate'   // G 无脊椎动物（节肢 / 软体 / 刺胞 / 棘皮 / 环节）
 
 export interface AnimalCategoryMeta {
   name: string
@@ -19,65 +17,40 @@ export interface AnimalCategoryMeta {
 }
 
 export const ANIMAL_CATEGORY_META: Record<AnimalCategory, AnimalCategoryMeta> = {
-  mammal: {
-    name: '哺乳动物',
-    description: '主要特征是胎生或哺乳，常见于陆地与部分海洋环境。',
-    color: '#0F766E',
-  },
-  bird: {
-    name: '鸟类',
-    description: '有羽毛、喙与翅膀，大多擅长飞行或栖息树上、水边。',
-    color: '#2563EB',
-  },
-  reptile: {
-    name: '爬行动物',
-    description: '体表多有鳞片，常贴地活动，也包含龟、鳄等类型。',
-    color: '#EA580C',
-  },
-  amphibian: {
-    name: '两栖动物',
-    description: '常在水域和陆地间活动，对潮湿环境依赖较高。',
-    color: '#0891B2',
-  },
-  fish: {
-    name: '鱼类',
-    description: '主要生活在水中，通过鳍和尾部完成游动。',
-    color: '#0284C7',
-  },
-  insect: {
-    name: '昆虫类',
-    description: '通常体型较小，许多种类拥有翅膀或明显分节结构。',
-    color: '#7C3AED',
-  },
-  arachnid: {
-    name: '蛛形类',
-    description: '包含蜘蛛、蝎子、蜱虫等，外形与昆虫差异较明显。',
+  carnivora: {
+    name: '食肉目',
+    description: '哺乳纲食肉目动物，多具犬齿与利爪，包含猫科、熊科、犬鼬科及鳍足类。',
     color: '#DC2626',
   },
-  crustacean: {
-    name: '甲壳类',
-    description: '常见于水边或海洋，具有坚硬外壳，如蟹和虾。',
-    color: '#EC4899',
+  ungulata: {
+    name: '有蹄类',
+    description: '哺乳纲偶蹄目与奇蹄目，四肢以蹄行进，多为草食或杂食。',
+    color: '#B45309',
   },
-  mollusk: {
-    name: '软体类',
-    description: '身体柔软，部分种类有壳，常见如蜗牛和鱿鱼。',
-    color: '#64748B',
+  other_mammal: {
+    name: '其他哺乳类',
+    description: '其他哺乳纲动物，含长鼻目、灵长目、啮齿目、兔形目、有袋类与鲸目等。',
+    color: '#0F766E',
   },
-  myriapod: {
-    name: '多足类',
-    description: '身体由多个体节组成，足数量明显较多，如蜈蚣。',
-    color: '#9333EA',
+  aves: {
+    name: '鸟纲',
+    description: '体被羽毛、前肢特化为翅、以喙取食的脊椎动物，含猛禽、游禽、鸣禽等。',
+    color: '#2563EB',
   },
-  marine_invertebrate: {
-    name: '海洋无脊椎类',
-    description: '生活在海洋中，没有脊椎结构，如海蜇、海星。',
-    color: '#0EA5E9',
+  herpetofauna: {
+    name: '爬行与两栖类',
+    description: '变温脊椎动物，含鳄目、有鳞目、龟鳖目以及无尾目蛙类。',
+    color: '#16A34A',
   },
-  annelid: {
-    name: '环节动物',
-    description: '身体呈连续分节状，典型代表为蠕虫类。',
-    color: '#A16207',
+  pisces: {
+    name: '鱼类',
+    description: '终生水生、以鳃呼吸的脊椎动物，含软骨鱼与硬骨鱼。',
+    color: '#0284C7',
+  },
+  invertebrate: {
+    name: '无脊椎动物',
+    description: '无脊椎类群，含昆虫纲、蛛形纲、甲壳纲、唇足纲、软体动物及刺胞动物等。',
+    color: '#7C3AED',
   },
 }
 
@@ -88,86 +61,99 @@ export const UNKNOWN_CATEGORY_META: AnimalCategoryMeta = {
 }
 
 export const ANIMAL_CATEGORY_BY_LABEL: Record<string, AnimalCategory> = {
-  Bear: 'mammal',
-  'Brown bear': 'mammal',
-  Bull: 'mammal',
-  Butterfly: 'insect',
-  Camel: 'mammal',
-  Canary: 'bird',
-  Caterpillar: 'insect',
-  Cattle: 'mammal',
-  Centipede: 'myriapod',
-  Cheetah: 'mammal',
-  Chicken: 'bird',
-  Crab: 'crustacean',
-  Crocodile: 'reptile',
-  Deer: 'mammal',
-  Duck: 'bird',
-  Eagle: 'bird',
-  Elephant: 'mammal',
-  Fish: 'fish',
-  Fox: 'mammal',
-  Frog: 'amphibian',
-  Giraffe: 'mammal',
-  Goat: 'mammal',
-  Goldfish: 'fish',
-  Goose: 'bird',
-  Hamster: 'mammal',
-  'Harbor seal': 'mammal',
-  Hedgehog: 'mammal',
-  Hippopotamus: 'mammal',
-  Horse: 'mammal',
-  Jaguar: 'mammal',
-  Jellyfish: 'marine_invertebrate',
-  Kangaroo: 'mammal',
-  Koala: 'mammal',
-  Ladybug: 'insect',
-  Leopard: 'mammal',
-  Lion: 'mammal',
-  Lizard: 'reptile',
-  Lynx: 'mammal',
-  Magpie: 'bird',
-  Monkey: 'mammal',
-  'Moths and butterflies': 'insect',
-  Mouse: 'mammal',
-  Mule: 'mammal',
-  Ostrich: 'bird',
-  Otter: 'mammal',
-  Owl: 'bird',
-  Panda: 'mammal',
-  Parrot: 'bird',
-  Penguin: 'bird',
-  Pig: 'mammal',
-  'Polar bear': 'mammal',
-  Rabbit: 'mammal',
-  Raccoon: 'mammal',
-  Raven: 'bird',
-  'Red panda': 'mammal',
-  Rhinoceros: 'mammal',
-  Scorpion: 'arachnid',
-  'Sea lion': 'mammal',
-  'Sea turtle': 'reptile',
-  Seahorse: 'fish',
-  Shark: 'fish',
-  Sheep: 'mammal',
-  Shrimp: 'crustacean',
-  Snail: 'mollusk',
-  Snake: 'reptile',
-  Sparrow: 'bird',
-  Spider: 'arachnid',
-  Squid: 'mollusk',
-  Squirrel: 'mammal',
-  Starfish: 'marine_invertebrate',
-  Swan: 'bird',
-  Tick: 'arachnid',
-  Tiger: 'mammal',
-  Tortoise: 'reptile',
-  Turkey: 'bird',
-  Turtle: 'reptile',
-  Whale: 'mammal',
-  Woodpecker: 'bird',
-  Worm: 'annelid',
-  Zebra: 'mammal',
+  // A 食肉目（16）
+  Bear: 'carnivora',
+  'Brown bear': 'carnivora',
+  Cheetah: 'carnivora',
+  Fox: 'carnivora',
+  'Harbor seal': 'carnivora',
+  Jaguar: 'carnivora',
+  Leopard: 'carnivora',
+  Lion: 'carnivora',
+  Lynx: 'carnivora',
+  Otter: 'carnivora',
+  Panda: 'carnivora',
+  'Polar bear': 'carnivora',
+  Raccoon: 'carnivora',
+  'Red panda': 'carnivora',
+  'Sea lion': 'carnivora',
+  Tiger: 'carnivora',
+
+  // B 有蹄类（13）
+  Bull: 'ungulata',
+  Camel: 'ungulata',
+  Cattle: 'ungulata',
+  Deer: 'ungulata',
+  Giraffe: 'ungulata',
+  Goat: 'ungulata',
+  Hippopotamus: 'ungulata',
+  Horse: 'ungulata',
+  Mule: 'ungulata',
+  Pig: 'ungulata',
+  Rhinoceros: 'ungulata',
+  Sheep: 'ungulata',
+  Zebra: 'ungulata',
+
+  // C 其他哺乳类（10）
+  Elephant: 'other_mammal',
+  Hamster: 'other_mammal',
+  Hedgehog: 'other_mammal',
+  Kangaroo: 'other_mammal',
+  Koala: 'other_mammal',
+  Monkey: 'other_mammal',
+  Mouse: 'other_mammal',
+  Rabbit: 'other_mammal',
+  Squirrel: 'other_mammal',
+  Whale: 'other_mammal',
+
+  // D 鸟纲（15）
+  Canary: 'aves',
+  Chicken: 'aves',
+  Duck: 'aves',
+  Eagle: 'aves',
+  Goose: 'aves',
+  Magpie: 'aves',
+  Ostrich: 'aves',
+  Owl: 'aves',
+  Parrot: 'aves',
+  Penguin: 'aves',
+  Raven: 'aves',
+  Sparrow: 'aves',
+  Swan: 'aves',
+  Turkey: 'aves',
+  Woodpecker: 'aves',
+
+  // E 爬行与两栖类（7）
+  Crocodile: 'herpetofauna',
+  Frog: 'herpetofauna',
+  Lizard: 'herpetofauna',
+  'Sea turtle': 'herpetofauna',
+  Snake: 'herpetofauna',
+  Tortoise: 'herpetofauna',
+  Turtle: 'herpetofauna',
+
+  // F 鱼类（4）
+  Fish: 'pisces',
+  Goldfish: 'pisces',
+  Seahorse: 'pisces',
+  Shark: 'pisces',
+
+  // G 无脊椎动物（15）
+  Butterfly: 'invertebrate',
+  Caterpillar: 'invertebrate',
+  Centipede: 'invertebrate',
+  Crab: 'invertebrate',
+  Jellyfish: 'invertebrate',
+  Ladybug: 'invertebrate',
+  'Moths and butterflies': 'invertebrate',
+  Scorpion: 'invertebrate',
+  Shrimp: 'invertebrate',
+  Snail: 'invertebrate',
+  Spider: 'invertebrate',
+  Squid: 'invertebrate',
+  Starfish: 'invertebrate',
+  Tick: 'invertebrate',
+  Worm: 'invertebrate',
 }
 
 export function getAnimalCategory(label: string): AnimalCategory | 'unknown' {

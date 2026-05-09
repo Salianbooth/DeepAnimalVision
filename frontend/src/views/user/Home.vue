@@ -14,6 +14,7 @@ import {
 import { CLASS_COLOR_MAP } from '@/constants/classMap'
 import { useHistoryStore } from '@/store/history'
 import type { Detection } from '@/store/history'
+import { mapDetections } from '@/utils/classMapper'
 
 interface RawDetection {
   class_id?: number
@@ -286,7 +287,7 @@ const handleUpload = async (file: File | null) => {
 
     loading.value = true
     const response = await request.post('/detect/', formData)
-    detections.value = normalizeDetections(response.data.detections)
+    detections.value = mapDetections(normalizeDetections(response.data.detections))
     drawCanvas()
     await historyStore.fetchHistoryList()
   } catch (error) {

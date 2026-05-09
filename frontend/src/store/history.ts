@@ -6,6 +6,7 @@ import {
   clearRecords,
   getRecordStats,
 } from '@/api/records'
+import { mapDetections, mapLabelStats } from '@/utils/classMapper'
 
 /**
  * 单个检测结果
@@ -74,8 +75,12 @@ export const useHistoryStore = defineStore('history', {
      */
     async fetchRecordDetail(id: number) {
       const res = await getRecordDetail(id)
-      this.current = res.data
-      return res.data
+      const detail: RecordDetail = {
+        ...res.data,
+        detections: mapDetections(res.data.detections ?? []),
+      }
+      this.current = detail
+      return detail
     },
 
     /**
@@ -106,7 +111,7 @@ export const useHistoryStore = defineStore('history', {
      * 获取当前用户跨所有记录的标签聚合统计
      */
     async fetchStats() {
-      this.globalLabelStats = await getRecordStats()
+      this.globalLabelStats = mapLabelStats(await getRecordStats())
     },
 
     /**
